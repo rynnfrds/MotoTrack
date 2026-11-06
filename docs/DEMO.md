@@ -34,6 +34,19 @@ Then hard-refresh the page (Ctrl+Shift+R) so the browser drops the cached
 `app.js` and `style.css`. Both steps are needed; either one alone leaves you
 looking at old behaviour.
 
+## Windows app instead of a browser
+
+Double-click `Start MotoTrack.bat`. A native window opens with the UI loaded; no
+terminal, no URL to remember. First time only:
+
+```bash
+uv pip install --python .venv/Scripts/python.exe pywebview
+```
+
+It is the same FastAPI app on loopback, so everything below applies unchanged.
+The window picks the next free port automatically instead of refusing to start,
+which matters when port 8770 is already busy.
+
 ## A demo that shows the thing working
 
 1. Open the UI. Drop a motovlog clip, pick `mixed`, press Analyse.

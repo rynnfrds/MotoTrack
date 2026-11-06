@@ -60,19 +60,37 @@ Outputs land in `out/<clip>/`:
 - `summary.json` - verdict time share, throughput, latency
 - `timeline.png` - the verdict strip over time
 
-## Web UI
+## Running it
+
+Two ways to run the same interface. The analysis is identical; only the shell
+differs.
+
+### Windows app (no browser, no terminal)
+
+Double-click **`Start MotoTrack.bat`**. A native window opens with the UI
+already loaded. This needs the optional extra once:
+
+```bash
+uv pip install --python .venv/Scripts/python.exe pywebview
+```
+
+Under the hood it starts the same FastAPI app on loopback and shows it in a
+WebView2 window, so there is no server to start first and no port to remember.
+
+### Browser
 
 ```bash
 .venv/Scripts/python.exe -m mototrack.cli web
 # -> http://127.0.0.1:8770
 ```
 
-Upload, pick a detector, watch progress, then land on a page with the annotated
-video, a verdict timeline, the numbers, and JSON export.
+Either way: upload, pick a detector, watch progress, then land on a page with the
+annotated video, a verdict timeline, the numbers, and JSON export.
 
 **Port 8770 is the default.** Port 8000 is deliberately avoided. Override with
 `--port` or the `MOTOTRACK_PORT` environment variable; the CLI checks the port is
-free before binding and tells you what is available if it is not.
+free before binding and tells you what is available if it is not. The desktop
+window picks the next free port automatically rather than refusing to start.
 
 ## Detectors
 
@@ -122,7 +140,7 @@ A negative result is a valid outcome. Write it down either way.
 .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-108 tests. Geometry, verdict logic and temporal smoothing are pure functions
+115 tests. Geometry, verdict logic and temporal smoothing are pure functions
 tested against hand-computed layouts; the pipeline and overlay tests decode the
 real output video; the API tests run in-process via `TestClient` and never bind
 a port.
