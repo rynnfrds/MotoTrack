@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import sys
+import time
 
 from . import config
 
@@ -150,6 +151,66 @@ def cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_desktop(args: argparse.Namespace) -> int:
+    """Open the same web UI inside a native Windows window.
+
+    Nothing about the analysis changes: this starts the identical FastAPI app on
+    a loopback port and points a WebView2 window at it. The desktop entry point
+    exists because "run a server, then open a browser" is a real obstacle for a
+    demo, and double-clicking one icon is not.
+    """
+    import threading
+
+    try:
+        import webview
+    except ImportError:
+        print("pywebview is not installed.", file=sys.stderr)
+        print("install it with: uv pip install pywebview", file=sys.stderr)
+        print("or use the browser UI instead: mototrack web", file=sys.stderr)
+        return 2
+
+    import uvicorn
+
+    host = "127.0.0.1"
+    port = config.resolve_port(args.port)
+    if port_in_use(host, port):
+        alternatives = suggest_ports(host, port + 1)
+        if not alternatives:
+            print("no free port near " + str(port), file=sys.stderr)
+            return 2
+        port = alternatives[0]
+
+    server = uvicorn.Server(
+        uvicorn.Config("app.main:app", host=host, port=port, log_level="warning")
+    )
+    thread = threading.Thread(target=server.run, daemon=True, name="mototrack-server")
+    thread.start()
+
+    # Wait for the server to accept connections before the window requests a page.
+    deadline = time.time() + 30.0
+    while time.time() < deadline and not server.started:
+        time.sleep(0.05)
+    if not server.started:
+        print("the local server did not start", file=sys.stderr)
+        return 2
+
+    url = "http://" + host + ":" + str(port)
+    print("MotoTrack desktop: " + url)
+    webview.create_window(
+        "MotoTrack",
+        url,
+        width=1180,
+        height=900,
+        min_size=(860, 640),
+        text_select=True,
+    )
+    try:
+        webview.start()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5.0)
+    return 0
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mototrack",
@@ -206,6 +267,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--port", type=int, default=None, help=f"default {config.DEFAULT_PORT} or ${config.PORT_ENV_VAR}"
     )
     web.set_defaults(func=cmd_web)
+
+    desktop = sub.add_parser("desktop", help="open the UI in a native window")
+    desktop.add_argument("--port", type=int, default=None)
+    desktop.set_defaults(func=cmd_desktop)
 
     return parser
 

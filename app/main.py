@@ -234,8 +234,12 @@ async def results_page(request: Request, job_id: str):
 
 
 @app.get("/api/health")
-async def health():
-    return {"ok": True, "port": config.DEFAULT_PORT, "detectors": sorted(config.MODEL_FILES)}
+async def health(request: Request):
+    # Report the port actually bound, not the configured default: the desktop
+    # window shifts to a free port when 8770 is taken, and a health check that
+    # echoed the default made that shift invisible.
+    bound = request.url.port or config.DEFAULT_PORT
+    return {"ok": True, "port": bound, "detectors": sorted(config.MODEL_FILES)}
 
 
 os.makedirs(JOBS_DIR, exist_ok=True)

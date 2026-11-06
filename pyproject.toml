@@ -20,6 +20,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+# Native window instead of a browser tab. Optional: the web UI works without it.
+desktop = ["pywebview>=5.0"]
 
 [project.scripts]
 mototrack = "mototrack.cli:main"
