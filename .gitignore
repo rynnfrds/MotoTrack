@@ -28,6 +28,10 @@ app/jobs/
 # Notebooks
 .ipynb_checkpoints/
 
+# Plan/report build intermediates (regenerate from PLAN.md)
+PLAN.html
+PLAN.docx
+
 # Local scratch files from tooling
 .tmp-*
 
