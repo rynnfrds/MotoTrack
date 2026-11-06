@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Models (downloaded, large, AGPL-3.0 third-party weights)
+models/
+*.pt
+*.onnx
+
+# Data and generated outputs
+data/gold/
+data/raw/
+out/
+app/jobs/
+*.mp4
+*.mov
+*.webm
+!tests/fixtures/*.mp4
+
+# Local editor settings (machine specific)
+.vscode/settings.json
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
