@@ -28,6 +28,12 @@ app/jobs/
 # Notebooks
 .ipynb_checkpoints/
 
+# Local scratch files from tooling
+.tmp-*
+
+# Unused third-party sample images collected during research
+data/samples/
+
 # OS
 .DS_Store
 Thumbs.db
