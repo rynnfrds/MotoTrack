@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MotoTrack - bisa nyalip?</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="head">
+      <p class="eyebrow">MotoTrack</p>
+      <h1>Bisa nyalip, atau engga?</h1>
+      <p class="lede">
+        Upload a motovlog POV clip. Every moment gets a verdict:
+        <strong>SAFE</strong>, <strong>TIGHT</strong>, or <strong>BLOCKED</strong>,
+        based on free space in your own corridor.
+      </p>
+    </header>
+
+    <form id="upload" class="panel" novalidate>
+      <div class="drop" id="drop">
+        <input type="file" id="file" name="file" accept="video/*" hidden>
+        <p class="drop-title">Drop a clip here, or <button type="button" class="link" id="browse">choose a file</button></p>
+        <p class="drop-meta" id="filename">no file selected</p>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>Detector</span>
+          <select id="detector" name="detector">
+            {% for d in detectors %}
+            <option value="{{ d }}" {% if d == default_detector %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="primary" id="submit" disabled>Analyse</button>
+      </div>
+
+      <p class="hint">
+        Up to {{ max_mb }} MB, first {{ max_seconds }} seconds are analysed.
+        Long clips are truncated, not rejected.
+      </p>
+      <p class="error" id="error" role="alert" hidden></p>
+    </form>
+
+    <section class="panel status" id="status" hidden>
+      <p class="status-line"><span id="statusText">Queued</span><span id="statusPct">0%</span></p>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <p class="hint" id="statusHint">Detecting and tracking. This runs on CPU, so a 30 s clip takes about half a minute.</p>
+    </section>
+
+    <footer class="foot">
+      <p>
+        Verdicts describe free lateral space in the ego corridor, not overall traffic safety.
+        Ranges are monocular estimates, not sensor readings.
+      </p>
+    </footer>
+  </main>
+<script src="/static/app.js"></script>
+</body>
+</html>

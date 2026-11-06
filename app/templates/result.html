@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MotoTrack result - {{ job.filename }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell wide">
+    <header class="head">
+      <p class="eyebrow"><a href="/">MotoTrack</a></p>
+      <h1>{{ job.filename }}</h1>
+      <p class="lede" id="lede">Loading result...</p>
+    </header>
+
+    <section class="panel" id="loading">
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <p class="hint" id="progressText">Working...</p>
+    </section>
+
+    <section id="done" hidden>
+      <div class="panel video-panel">
+        <video id="player" controls playsinline preload="metadata"></video>
+      </div>
+
+      <div class="panel">
+        <h2>Verdict timeline</h2>
+        <div class="timeline-wrap">
+          <img id="timeline" alt="Colour-coded verdict timeline across the clip">
+          <div class="playhead" id="playhead" hidden></div>
+        </div>
+        <div class="legend">
+          <span><i class="sw safe"></i>SAFE</span>
+          <span><i class="sw tight"></i>TIGHT</span>
+          <span><i class="sw blocked"></i>BLOCKED</span>
+          <span><i class="sw unknown"></i>UNKNOWN</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Numbers</h2>
+        <dl class="stats" id="stats"></dl>
+        <p class="hint">
+          Ranges are monocular estimates from assumed object heights and a 78 degree
+          field of view. Treat them as relative, not as measurements.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Export</h2>
+        <div class="row">
+          <a class="ghost" id="dlEvents" download="events.json">events.json</a>
+          <a class="ghost" id="dlSummary" download="summary.json">summary.json</a>
+          <a class="ghost" id="dlVideo" download="annotated.mp4">annotated.mp4</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel error-panel" id="failed" hidden>
+      <p class="error" id="failText"></p>
+      <p><a class="ghost" href="/">Try another clip</a></p>
+    </section>
+  </main>
+<script>window.JOB_ID = {{ job.id | tojson }};</script>
+<script src="/static/result.js"></script>
+</body>
+</html>
