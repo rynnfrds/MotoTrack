@@ -1,0 +1,17 @@
+.venv/
+models/
+data/
+out/
+app/jobs/
+*.pt
+*.onnx
+*.mp4
+*.mov
+*.webm
+__pycache__/
+*.pyc
+.pytest_cache/
+.egg-info/
+PLAN.html
+PLAN.docx
+.vscode/

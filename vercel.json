@@ -1,7 +1,9 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
   "outputDirectory": "web",
+  "cleanUrls": true,
   "rewrites": [
     {
       "source": "/results/:id",
@@ -9,4 +11,3 @@
     }
   ]
 }
-
