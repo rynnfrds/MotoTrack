@@ -77,7 +77,7 @@ uv pip install --python .venv/Scripts/python.exe pywebview
 Under the hood it starts the same FastAPI app on loopback and shows it in a
 WebView2 window, so there is no server to start first and no port to remember.
 
-### Browser
+### Browser (Local FastAPI)
 
 ```bash
 .venv/Scripts/python.exe -m mototrack.cli web
@@ -91,6 +91,28 @@ annotated video, a verdict timeline, the numbers, and JSON export.
 `--port` or the `MOTOTRACK_PORT` environment variable; the CLI checks the port is
 free before binding and tells you what is available if it is not. The desktop
 window picks the next free port automatically rather than refusing to start.
+
+### Deploying to Vercel
+
+A standalone web version lives in [`web/`](web/) with a matching [`vercel.json`](vercel.json).
+Because Vercel serverless functions cap bundle sizes at 250 MB and lack persistent
+background workers or `ffmpeg` for long PyTorch/Ultralytics video transcoding, the
+Vercel web app runs **100% client-side in the browser**:
+
+- **In-Browser AI Engine (default on Vercel):** Uses TensorFlow.js (`COCO-SSD` WebGL)
+  paired with a faithful JavaScript port ([`web/static/mototrack-engine.js`](web/static/mototrack-engine.js))
+  of MotoTrack's pinhole distance estimation, relative ego-corridor trapezoid,
+  scale-invariant gap ratio, EMA box smoothing + 0.4 s dropout coasting, and
+  calibrated `1.8 / 0.4` verdict hysteresis. Also includes a 1-click **Demo Traffic Clip**
+  generator so visitors can test the pipeline without uploading a file.
+- **Hybrid FastAPI Backend (optional):** Expand *Execution Mode & Remote Backend*
+  in the UI and paste your local or tunnelled `mototrack web` URL to run native
+  YOLO26n checkpoints (`coco` or `mixed`) on your own server.
+
+To deploy to Vercel:
+
+1. Push this repository to GitHub / GitLab / Bitbucket, or run `npx vercel` from the project directory.
+2. Vercel automatically detects [`vercel.json`](vercel.json) and serves `web/` as the output directory.
 
 ## Detectors
 

@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,6 +25,12 @@ JOBS_DIR = config.JOBS_DIR
 ALLOWED = set(config.ALLOWED_UPLOAD_EXTENSIONS)
 
 app = FastAPI(title="MotoTrack", docs_url="/api/docs")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MotoTrack - bisa nyalip?</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <!-- UPLOAD VIEW -->
+  <main class="shell" id="uploadView">
+    <header class="head">
+      <div class="head-top">
+        <p class="eyebrow">MotoTrack</p>
+        <span class="badge" id="modeBadge" title="Runs directly in browser via TensorFlow.js (COCO-SSD) or connects to a MotoTrack FastAPI backend">Browser AI Ready</span>
+      </div>
+      <h1>Bisa nyalip, atau engga?</h1>
+      <p class="lede">
+        Upload a motovlog POV clip (or try a built-in traffic simulation). Every moment gets a verdict:
+        <strong>SAFE</strong>, <strong>TIGHT</strong>, or <strong>BLOCKED</strong>,
+        based on free space in your own corridor.
+      </p>
+    </header>
+
+    <form id="upload" class="panel" novalidate>
+      <div class="drop" id="drop">
+        <input type="file" id="file" name="file" accept="video/*" hidden>
+        <p class="drop-title">Drop a clip here, or <button type="button" class="link" id="browse">choose a file</button></p>
+        <p class="drop-meta" id="filename">no file selected</p>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>Detector</span>
+          <select id="detector" name="detector">
+            <option value="coco" selected>coco (Road-user filter)</option>
+            <option value="mixed">mixed (South Asian mixed traffic)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Max clip length</span>
+          <select id="maxSeconds" name="maxSeconds">
+            <option value="15">15 seconds (fast)</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="60">60 seconds</option>
+            <option value="90">90 seconds</option>
+          </select>
+        </label>
+        <button type="submit" class="primary" id="submit" disabled>Analyse</button>
+        <button type="button" class="ghost" id="demoBtn">Run Demo Traffic Clip</button>
+      </div>
+
+      <details class="advanced">
+        <summary>Execution Mode &amp; Remote Backend (Optional)</summary>
+        <div class="adv-body">
+          <p class="hint">
+            By default on Vercel, MotoTrack runs <strong>100% in your browser</strong> using WebGL object detection (COCO-SSD) + the exact MotoTrack pinhole geometry, ByteTrack-style Kalman/EMA smoother, and calibrated hysteresis rules (<code>1.8 / 0.4</code>).
+            If you also run the Python FastAPI server (<code>mototrack web</code> or a tunnel), enter its URL below to use native YOLO26n weights.
+          </p>
+          <label class="field">
+            <span>FastAPI Backend URL (leave blank for In-Browser Engine)</span>
+            <input type="url" id="backendUrl" placeholder="e.g. http://127.0.0.1:8770 or https://your-api.ngrok.app">
+          </label>
+        </div>
+      </details>
+
+      <p class="hint">
+        Up to 200 MB, first 15–90 seconds are analysed at 10 fps. Long clips are truncated, not rejected.
+      </p>
+      <p class="error" id="error" role="alert" hidden></p>
+    </form>
+
+    <section class="panel status" id="status" hidden>
+      <p class="status-line"><span id="statusText">Loading AI detector...</span><span id="statusPct">0%</span></p>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <p class="hint" id="statusHint">Detecting and tracking road users, computing corridor geometry, and rendering HUD.</p>
+      <div class="live-preview-wrap" id="livePreviewWrap" hidden>
+        <canvas id="liveCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel info-grid">
+      <div>
+        <h2>How the decision works</h2>
+        <ol class="steps-list">
+          <li><strong>Detect &amp; Track:</strong> Identifies road users (<code>person</code>, <code>bicycle</code>, <code>motorcycle</code>, <code>car</code>, <code>bus</code>, <code>truck</code>) and smooths boxes with EMA (<code>&alpha;=0.45</code>) + 0.4 s dropout coasting.</li>
+          <li><strong>Ego Corridor:</strong> Projects a relative trapezoid (bottom <code>0.30–0.70</code> width to horizon <code>y=0.45</code>) that works on both 16:9 landscape and 9:16 reels.</li>
+          <li><strong>Scale-Invariant Gap:</strong> Measures the widest free lateral gap in the nearest occupied depth band, normalised by median vehicle width at that same band.</li>
+          <li><strong>Calibrated Verdict:</strong> Fitted thresholds (<code>SAFE &ge; 1.8</code>, <code>TIGHT &ge; 0.4</code>) with center-line coverage &amp; TTC overrides, stabilised by a 2.0 s median filter and 0.5 s hysteresis.</li>
+        </ol>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <p>
+        Verdicts describe free lateral space in the ego corridor, not overall traffic safety.
+        Ranges are monocular estimates from assumed object heights and a 78&deg; HFOV, not sensor readings.
+      </p>
+    </footer>
+  </main>
+
+  <!-- RESULT VIEW -->
+  <main class="shell wide" id="resultView" hidden>
+    <header class="head">
+      <div class="head-top">
+        <p class="eyebrow"><a href="#" id="backLink">&larr; MotoTrack</a></p>
+        <span class="badge" id="resultEngineBadge">In-Browser Engine</span>
+      </div>
+      <h1 id="resultTitle">clip.mp4</h1>
+      <p class="lede" id="lede">Loading result...</p>
+    </header>
+
+    <section id="done">
+      <div class="panel video-panel">
+        <div class="player-stage" id="playerStage">
+          <video id="player" controls playsinline preload="metadata"></video>
+          <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+        </div>
+        <div class="player-bar">
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleHud" checked>
+            <span>Show Annotated Corridor &amp; HUD Overlay</span>
+          </label>
+          <span class="hint" id="frameReadout">t=0.0s</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Verdict timeline <span class="sub-hint">(click anywhere on the strip to seek)</span></h2>
+        <div class="timeline-wrap" id="timelineWrap">
+          <img id="timeline" alt="Colour-coded verdict timeline across the clip">
+          <div class="playhead" id="playhead" hidden></div>
+        </div>
+        <div class="legend">
+          <span><i class="sw safe"></i>SAFE</span>
+          <span><i class="sw tight"></i>TIGHT</span>
+          <span><i class="sw blocked"></i>BLOCKED</span>
+          <span><i class="sw unknown"></i>UNKNOWN</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Numbers</h2>
+        <dl class="stats" id="stats"></dl>
+        <p class="hint">
+          Ranges are monocular estimates from assumed object heights and a 78 degree
+          field of view. Treat them as relative, not as measurements.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Verdict segments</h2>
+        <div class="table-wrap">
+          <table class="seg-table" id="segTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Verdict</th>
+                <th>Min Gap Ratio</th>
+                <th>Frames</th>
+                <th>Blocking IDs</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Export</h2>
+        <div class="row">
+          <a class="ghost" id="dlEvents" download="events.json">events.json</a>
+          <a class="ghost" id="dlSummary" download="summary.json">summary.json</a>
+          <a class="ghost" id="dlTimeline" download="timeline.png">timeline.png</a>
+          <a class="ghost" id="dlVideo" download="annotated.webm">annotated video</a>
+          <button type="button" class="primary" id="newClipBtn">Analyse Another Clip</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- TensorFlow.js + COCO-SSD for zero-server Vercel execution -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="static/mototrack-engine.js"></script>
+  <script src="static/app.js"></script>
+</body>
+</html>
+
