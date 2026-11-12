@@ -918,174 +918,558 @@
     return out;
   }
 
-  // --- Synthetic Demo Video Generator ---------------------------------------
+  // --- Synthetic Demo Clip: 30 s traffic POV simulation ----------------------
 
-  async function generateDemoVideoBlob() {
-    const width = 640;
-    const height = 360;
-    const fps = 20;
-    const durationS = 12;
-    const totalFrames = fps * durationS;
+  // MediaRecorder timestamps frames by wall clock, so the recorded file is as
+  // long as the draw loop actually runs. The old generator drew 12 s of frames
+  // with a fixed 12 ms sleep per frame and produced a 3 s file: 30 analysed
+  // frames, and a verdict timeline that never reached TIGHT or BLOCKED.
+  //
+  // Every actor here is placed in metres from the camera and projected through
+  // the same pinhole relation geometry.py uses to estimate distance. The clip
+  // the detector sees and the boxes the engine is told about therefore agree.
+  const DEMO_CLIP = {
+    WIDTH: 960,
+    HEIGHT: 540,
+    FPS: 25,
+    DURATION_S: 30,
+    CAMERA_HEIGHT_M: 1.35,
+    ROAD_HALF_M: 6.9,
+    LANE_EDGE_M: 2.3,
+    DASH_WIDTH_M: 0.16,
+    SPEED_MPS: 7.5,
+  };
+
+  const DEMO_LANE_DASH_M = 9.0;
+  const DEMO_LANE_DASH_LENGTH_M = 3.2;
+
+  function demoClamp01(value) {
+    return Math.min(1, Math.max(0, value));
+  }
+
+  function demoEase(value) {
+    const v = demoClamp01(value);
+    return v * v * (3 - 2 * v);
+  }
+
+  function demoLerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function demoProjection(width, height) {
+    return {
+      width,
+      height,
+      horizonY: height * CONFIG.CORRIDOR_HORIZON_Y,
+      focal: focalLengthPx(width),
+      groundK: focalLengthPx(width) * DEMO_CLIP.CAMERA_HEIGHT_M,
+    };
+  }
+
+  // Screen row where the road surface at depth z metres meets the ground plane.
+  function demoGroundY(proj, z) {
+    return proj.horizonY + proj.groundK / Math.max(1.2, z);
+  }
+
+  // The story, in metres. Measured verdicts for this timeline (10 fps analysis,
+  // same code path as app.js) are roughly:
+  //   0.0-0.4 s   first frames, stabiliser has no window yet     -> UNKNOWN
+  //   0.4-10.5 s  lead car 55 m out, corridor wide open          -> SAFE
+  //   10.5-16.4 s ego closes, gap ratio crosses 1.8 then 0.4     -> TIGHT
+  //   16.4-23.4 s lead car fills the corridor at ~5 m            -> BLOCKED
+  //   23.4-30.0 s it pulled onto the right shoulder, we pass     -> SAFE
+  function demoActorsAt(t) {
+    // Lead car: parked ahead in our lane, we close on it. Around t=21 it pulls
+    // onto the right shoulder so the corridor reopens, and the next car appears
+    // far down the road as the closing shot.
+    const near = demoEase((t - 0.5) / 18.0);
+    const pullAside = demoEase((t - 21.3) / 2.9);
+    const follow = demoEase((t - 23.5) / 6.0);
+    const oncoming = demoEase(t / 26.0);
+    const shoulder = demoEase((t - 10.0) / 20.0);
+
+    const leadZ = demoLerp(demoLerp(55, 5.2, near), 9.5, pullAside);
+    const leadLat = demoLerp(0.2, 7.6, pullAside);
+
+    return [
+      {
+        cls_name: "car",
+        conf: 0.95,
+        body: "#2f6fb3",
+        widthM: 1.85,
+        heightM: 1.5,
+        z: leadZ,
+        latM: leadLat,
+      },
+      {
+        cls_name: "car",
+        conf: 0.9,
+        body: "#b9bec6",
+        widthM: 1.75,
+        heightM: 1.45,
+        z: demoLerp(52, 9.0, oncoming),
+        latM: demoLerp(-5.6, -4.4, oncoming),
+      },
+      {
+        cls_name: "motorcycle",
+        conf: 0.88,
+        body: "#25303c",
+        widthM: 0.72,
+        heightM: 1.55,
+        z: demoLerp(34, 6.2, shoulder),
+        latM: demoLerp(6.6, 5.8, shoulder),
+      },
+      {
+        cls_name: "car",
+        conf: 0.9,
+        body: "#39424d",
+        widthM: 1.8,
+        heightM: 1.45,
+        z: demoLerp(140, 58, follow),
+        latM: 0.2,
+      },
+    ];
+  }
+
+  function demoBoxesAt(t, width, height) {
+    const proj = demoProjection(width, height);
+    const boxes = [];
+    for (const actor of demoActorsAt(t)) {
+      const z = Math.max(1.6, actor.z);
+      const boxH = (proj.focal * actor.heightM) / z;
+      const boxW = (proj.focal * actor.widthM) / z;
+      const cx = width / 2 + (proj.focal * actor.latM) / z;
+      const bottomY = demoGroundY(proj, z);
+      const box = {
+        cls_name: actor.cls_name,
+        conf: actor.conf,
+        x1: cx - boxW / 2,
+        y1: bottomY - boxH,
+        x2: cx + boxW / 2,
+        y2: bottomY,
+        body: actor.body,
+      };
+      // Skip actors that are entirely off frame: they cannot be detected.
+      if (box.x2 < 0 || box.x1 > width || box.y2 < 0 || box.y1 > height) continue;
+      boxes.push(box);
+    }
+    return boxes;
+  }
+
+  // Ground truth for the demo clip. The clip is deterministic, so the analysis
+  // path can regenerate this instead of shipping a sidecar JSON.
+  function demoSyntheticDetections(width, height, fps, durationS) {
+    const w = width || DEMO_CLIP.WIDTH;
+    const h = height || DEMO_CLIP.HEIGHT;
+    const rate = fps || DEMO_CLIP.FPS;
+    const total = Math.round((durationS || DEMO_CLIP.DURATION_S) * rate);
+    const frames = [];
+    for (let f = 0; f < total; f++) {
+      const t = f / rate;
+      frames.push({ t, boxes: demoBoxesAt(t, w, h) });
+    }
+    return frames;
+  }
+
+  function demoRand(i) {
+    const value = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  function demoRoundRectPath(ctx, x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  function demoShade(hex, amount) {
+    const value = parseInt(hex.slice(1), 16);
+    const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+    const shifted = channels.map((c) => {
+      const v = amount < 0 ? c * (1 + amount) : c + (255 - c) * amount;
+      return Math.round(Math.max(0, Math.min(255, v)));
+    });
+    return `rgb(${shifted[0]}, ${shifted[1]}, ${shifted[2]})`;
+  }
+
+  function drawDemoCar(ctx, box) {
+    const w = box.x2 - box.x1;
+    const h = box.y2 - box.y1;
+    if (w < 3 || h < 3) {
+      ctx.fillStyle = box.body || "#2f6fb3";
+      ctx.fillRect(box.x1, box.y1, Math.max(1, w), Math.max(1, h));
+      return;
+    }
+    const body = box.body || "#2f6fb3";
+    const r = Math.max(2, Math.min(w, h) * 0.14);
+
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
+    ctx.beginPath();
+    ctx.ellipse(
+      box.x1 + w / 2,
+      box.y2,
+      w * 0.5,
+      Math.max(1.5, h * 0.05),
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    ctx.fillStyle = demoShade(body, -0.35);
+    demoRoundRectPath(ctx, box.x1 + w * 0.14, box.y1, w * 0.72, h * 0.52, r);
+    ctx.fill();
+
+    ctx.fillStyle = "#0f1824";
+    demoRoundRectPath(
+      ctx,
+      box.x1 + w * 0.21,
+      box.y1 + h * 0.07,
+      w * 0.58,
+      h * 0.28,
+      r * 0.6
+    );
+    ctx.fill();
+    ctx.fillStyle = "rgba(150, 190, 220, 0.22)";
+    demoRoundRectPath(
+      ctx,
+      box.x1 + w * 0.23,
+      box.y1 + h * 0.09,
+      w * 0.54,
+      h * 0.14,
+      r * 0.5
+    );
+    ctx.fill();
+
+    ctx.fillStyle = body;
+    demoRoundRectPath(ctx, box.x1, box.y1 + h * 0.34, w, h * 0.62, r);
+    ctx.fill();
+
+    ctx.fillStyle = demoShade(body, 0.18);
+    ctx.fillRect(
+      box.x1 + w * 0.2,
+      box.y1 + h * 0.36,
+      w * 0.6,
+      Math.max(1, h * 0.03)
+    );
+
+    const tailW = Math.max(2, w * 0.17);
+    const tailH = Math.max(2, h * 0.09);
+    const tailY = box.y1 + h * 0.52;
+    if (w > 26) {
+      ctx.fillStyle = "rgba(232, 69, 58, 0.22)";
+      demoRoundRectPath(
+        ctx,
+        box.x1 + w * 0.02,
+        tailY - tailH * 0.5,
+        tailW * 1.6,
+        tailH * 2,
+        tailH * 0.5
+      );
+      ctx.fill();
+      demoRoundRectPath(
+        ctx,
+        box.x2 - w * 0.02 - tailW * 1.6,
+        tailY - tailH * 0.5,
+        tailW * 1.6,
+        tailH * 2,
+        tailH * 0.5
+      );
+      ctx.fill();
+    }
+    ctx.fillStyle = "#e8453a";
+    demoRoundRectPath(ctx, box.x1 + w * 0.07, tailY, tailW, tailH, tailH * 0.35);
+    ctx.fill();
+    demoRoundRectPath(
+      ctx,
+      box.x2 - w * 0.07 - tailW,
+      tailY,
+      tailW,
+      tailH,
+      tailH * 0.35
+    );
+    ctx.fill();
+
+    if (w > 40 && h > 24) {
+      ctx.fillStyle = "#e8eef2";
+      const plateW = w * 0.26;
+      const plateH = Math.max(2, h * 0.055);
+      ctx.fillRect(box.x1 + w / 2 - plateW / 2, box.y1 + h * 0.66, plateW, plateH);
+    }
+
+    ctx.fillStyle = demoShade(body, -0.5);
+    demoRoundRectPath(
+      ctx,
+      box.x1 + w * 0.03,
+      box.y2 - h * 0.14,
+      w * 0.94,
+      h * 0.11,
+      r * 0.4
+    );
+    ctx.fill();
+  }
+
+  function drawDemoScooter(ctx, box) {
+    const w = box.x2 - box.x1;
+    const h = box.y2 - box.y1;
+    if (w < 2 || h < 2) {
+      ctx.fillStyle = box.body || "#25303c";
+      ctx.fillRect(box.x1, box.y1, Math.max(1, w), Math.max(1, h));
+      return;
+    }
+
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(
+      box.x1 + w / 2,
+      box.y2,
+      w * 0.45,
+      Math.max(1, h * 0.02),
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "#1f2731";
+    demoRoundRectPath(
+      ctx,
+      box.x1 + w * 0.18,
+      box.y1 + h * 0.18,
+      w * 0.64,
+      h * 0.44,
+      w * 0.22
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "#d9e2ea";
+    ctx.beginPath();
+    ctx.ellipse(
+      box.x1 + w * 0.5,
+      box.y1 + h * 0.14,
+      w * 0.26,
+      h * 0.13,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    ctx.fillStyle = box.body || "#25303c";
+    demoRoundRectPath(
+      ctx,
+      box.x1 + w * 0.2,
+      box.y1 + h * 0.55,
+      w * 0.6,
+      h * 0.32,
+      w * 0.16
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "#e8453a";
+    ctx.fillRect(
+      box.x1 + w * 0.42,
+      box.y1 + h * 0.6,
+      Math.max(2, w * 0.16),
+      Math.max(2, h * 0.05)
+    );
+  }
+
+  function drawDemoRoad(ctx, proj, t) {
+    const W = proj.width;
+    const H = proj.height;
+    const horizonY = proj.horizonY;
+    const focal = proj.focal;
+    const zFar = 90;
+    const zBottom = proj.groundK / Math.max(1, H - horizonY);
+    const xAt = (latM, z) => W / 2 + (focal * latM) / Math.max(1.2, z);
+
+    const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+    sky.addColorStop(0, "#4d7fb4");
+    sky.addColorStop(0.62, "#9dc0de");
+    sky.addColorStop(1, "#e7eff6");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, horizonY);
+
+    const cover = W / 22;
+    const drift = (t * DEMO_CLIP.SPEED_MPS * 0.55) % cover;
+    for (let i = -1; i < 23; i++) {
+      const tuftH = (0.02 + demoRand(i + 3) * 0.05) * H;
+      ctx.fillStyle = i % 2 === 0 ? "#3f5140" : "#475a45";
+      ctx.fillRect(i * cover - drift, horizonY - tuftH, cover * 0.95, tuftH);
+    }
+    ctx.fillStyle = "rgba(228, 238, 246, 0.5)";
+    ctx.fillRect(0, horizonY - H * 0.01, W, H * 0.01);
+
+    ctx.fillStyle = "#4a5a40";
+    ctx.fillRect(0, horizonY, W, H - horizonY);
+
+    const roadYFar = demoGroundY(proj, zFar);
+    ctx.beginPath();
+    ctx.moveTo(xAt(-DEMO_CLIP.ROAD_HALF_M, zFar), roadYFar);
+    ctx.lineTo(xAt(DEMO_CLIP.ROAD_HALF_M, zFar), roadYFar);
+    ctx.lineTo(xAt(DEMO_CLIP.ROAD_HALF_M, zBottom), H);
+    ctx.lineTo(xAt(-DEMO_CLIP.ROAD_HALF_M, zBottom), H);
+    ctx.closePath();
+    ctx.fillStyle = "#3a3f45";
+    ctx.fill();
+
+    const asphalt = ctx.createLinearGradient(0, roadYFar, 0, H);
+    asphalt.addColorStop(0, "rgba(255, 255, 255, 0.06)");
+    asphalt.addColorStop(1, "rgba(0, 0, 0, 0.22)");
+    ctx.fillStyle = asphalt;
+    ctx.fill();
+
+    ctx.lineCap = "butt";
+
+    // Solid white line separating opposing traffic, plus the outer edge.
+    ctx.strokeStyle = "rgba(236, 240, 243, 0.8)";
+    for (const latM of [-DEMO_CLIP.LANE_EDGE_M, -DEMO_CLIP.ROAD_HALF_M + 0.3]) {
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(xAt(latM, zFar), demoGroundY(proj, zFar));
+      ctx.lineTo(xAt(latM, zBottom), H);
+      ctx.stroke();
+    }
+
+    // Dashed lane divider on the right of the ego lane, drawn as a perspective
+    // quad: a fixed-pixel rectangle turned the nearest dash into a white pillar.
+    const phase = (t * DEMO_CLIP.SPEED_MPS) % DEMO_LANE_DASH_M;
+    const dashHalfW = (z) => Math.max(0.9, (focal * DEMO_CLIP.DASH_WIDTH_M) / 2 / z);
+    ctx.fillStyle = "rgba(240, 243, 245, 0.82)";
+    for (let k = 0; k < 20; k++) {
+      const zNear = 6.0 + k * DEMO_LANE_DASH_M + (DEMO_LANE_DASH_M - phase);
+      const zFarDash = zNear + DEMO_LANE_DASH_LENGTH_M;
+      const yNear = Math.min(H + 4, demoGroundY(proj, zNear));
+      const yFarDash = demoGroundY(proj, zFarDash);
+      if (yNear <= yFarDash || yFarDash > H) continue;
+      const xNear = W / 2 + (focal * DEMO_CLIP.LANE_EDGE_M) / zNear;
+      const xFar = W / 2 + (focal * DEMO_CLIP.LANE_EDGE_M) / zFarDash;
+      const wNear = dashHalfW(zNear);
+      const wFar = dashHalfW(zFarDash);
+      ctx.beginPath();
+      ctx.moveTo(xNear - wNear, yNear);
+      ctx.lineTo(xNear + wNear, yNear);
+      ctx.lineTo(xFar + wFar, yFarDash);
+      ctx.lineTo(xFar - wFar, yFarDash);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Light poles along the verge. They start at 11 m: a closer pole is a
+    // full-height black bar running off both sides of the frame, which reads as
+    // a glitch rather than a roadside object.
+    const poleSpacing = 13;
+    const polePhase = (t * DEMO_CLIP.SPEED_MPS) % poleSpacing;
+    for (let k = 0; k < 9; k++) {
+      const z = 11 + k * poleSpacing + (poleSpacing - polePhase);
+      const poleY = demoGroundY(proj, z);
+      if (poleY > H + 40) continue;
+      const poleH = Math.min(H * 0.8, (focal * 3.4) / z);
+      const poleW = Math.max(1.2, (focal * 0.12) / z);
+      const armLen = Math.max(2, (focal * 0.9) / z);
+      ctx.fillStyle = "#2b2f33";
+      for (const side of [-1, 1]) {
+        const poleX = xAt(side * (DEMO_CLIP.ROAD_HALF_M + 0.9), z);
+        if (poleX < -40 || poleX > W + 40) continue;
+        ctx.fillRect(poleX - poleW / 2, poleY - poleH, poleW, poleH);
+        ctx.fillRect(
+          side < 0 ? poleX - poleW / 2 : poleX - armLen,
+          poleY - poleH,
+          armLen,
+          Math.max(1, poleW * 0.8)
+        );
+      }
+    }
+  }
+
+  function drawDemoFrame(ctx, proj, t) {
+    drawDemoRoad(ctx, proj, t);
+    for (const box of demoBoxesAt(t, proj.width, proj.height)) {
+      if (box.cls_name === "motorcycle") {
+        drawDemoScooter(ctx, box);
+      } else {
+        drawDemoCar(ctx, box);
+      }
+    }
+  }
+
+  function demoPickMimeType() {
+    if (typeof MediaRecorder === "undefined") return "";
+    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
+      return "video/webm;codecs=vp9";
+    }
+    return MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "";
+  }
+
+  async function generateDemoVideoBlob(options) {
+    const opts = options || {};
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
+
+    if (typeof MediaRecorder === "undefined") {
+      throw new Error(
+        "This browser cannot record a canvas stream (MediaRecorder unavailable)."
+      );
+    }
+
+    const { WIDTH: width, HEIGHT: height, FPS: fps, DURATION_S: durationS } = DEMO_CLIP;
+    const totalFrames = Math.round(durationS * fps);
+    const frameMs = 1000 / fps;
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-
-    // We also return ground-truth synthetic detections per timestamp so if WebGL
-    // is slow or offline, or when running the demo clip, real vehicle boxes are
-    // guaranteed to be detected!
-    const syntheticDetectionsByFrame = [];
+    const proj = demoProjection(width, height);
 
     const stream = canvas.captureStream(fps);
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : MediaRecorder.isTypeSupported("video/webm")
-      ? "video/webm"
-      : "";
-
+    const mimeType = demoPickMimeType();
     const chunks = [];
     const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
+      ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2200000 })
       : new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) chunks.push(event.data);
     };
-
-    const donePromise = new Promise((resolve) => {
+    const stopped = new Promise((resolve) => {
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
-        resolve(blob);
+        resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
       };
     });
 
-    recorder.start();
+    drawDemoFrame(ctx, proj, 0);
+    recorder.start(1000);
+    const startedAt = performance.now();
 
-    const horizonY = Math.round(height * CONFIG.CORRIDOR_HORIZON_Y);
-
-    for (let f = 0; f < totalFrames; f++) {
-      const t = f / fps;
-
-      // Sky
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
-      skyGrad.addColorStop(0, "#6fa3d2");
-      skyGrad.addColorStop(1, "#c8ddf0");
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, width, horizonY);
-
-      // Road
-      ctx.fillStyle = "#373d45";
-      ctx.fillRect(0, horizonY, width, height - horizonY);
-
-      // Shoulders
-      ctx.fillStyle = "#4d5c46";
-      ctx.beginPath();
-      ctx.moveTo(0, horizonY);
-      ctx.lineTo(width * 0.36, horizonY);
-      ctx.lineTo(width * 0.05, height);
-      ctx.lineTo(0, height);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.moveTo(width, horizonY);
-      ctx.lineTo(width * 0.64, horizonY);
-      ctx.lineTo(width * 0.95, height);
-      ctx.lineTo(width, height);
-      ctx.fill();
-
-      // Dashed lane markings moving toward camera
-      ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = 3;
-      const offset = (t * 6) % 1;
-      for (let i = 0; i < 6; i++) {
-        const p0 = ((i + offset) / 6);
-        const p1 = Math.min(1, p0 + 0.07);
-        const y0 = horizonY + Math.pow(p0, 1.8) * (height - horizonY);
-        const y1 = horizonY + Math.pow(p1, 1.8) * (height - horizonY);
-        ctx.beginPath();
-        ctx.moveTo(width * 0.5, y0);
-        ctx.lineTo(width * 0.5, y1);
-        ctx.stroke();
-      }
-
-      // Scenario timeline:
-      // 0 - 3.5s: Clear corridor (1 far vehicle on left shoulder -> SAFE)
-      // 3.5 - 7.5s: Scooter + car narrowing the corridor -> TIGHT
-      // 7.5 - 10.5s: Car directly ahead in near band blocking corridor -> BLOCKED
-      // 10.5 - 12.0s: Vehicle pulls aside -> SAFE
-      const frameBoxes = [];
-
-      // Always keep a distant reference vehicle on the left lane so detection_count >= 1
-      const refCar = {
-        cls_name: "car",
-        conf: 0.92,
-        x1: width * 0.16,
-        y1: horizonY + 25,
-        x2: width * 0.27,
-        y2: horizonY + 85,
-      };
-      frameBoxes.push(refCar);
-
-      if (t >= 3.2 && t < 7.5) {
-        // Scooter on right side of corridor (leaves moderate gap -> TIGHT)
-        const prog = Math.min(1, (t - 3.2) / 1.5);
-        const cx = width * (0.58 - 0.03 * Math.sin(t * 2));
-        const by = horizonY + 115 + prog * 25;
-        const bw = 54;
-        const bh = 92;
-        frameBoxes.push({
-          cls_name: "motorcycle",
-          conf: 0.91,
-          x1: cx - bw / 2,
-          y1: by - bh,
-          x2: cx + bw / 2,
-          y2: by,
-        });
-      }
-
-      if (t >= 7.2 && t < 10.4) {
-        // Large car/truck dead-center in near corridor -> BLOCKED
-        const cx = width * 0.50;
-        const by = height * 0.91;
-        const bw = 185;
-        const bh = 165;
-        frameBoxes.push({
-          cls_name: "car",
-          conf: 0.96,
-          x1: cx - bw / 2,
-          y1: by - bh,
-          x2: cx + bw / 2,
-          y2: by,
-        });
-      }
-
-      // Draw vehicles onto canvas so video looks realistic
-      for (const b of frameBoxes) {
-        const w = b.x2 - b.x1;
-        const h = b.y2 - b.y1;
-        ctx.fillStyle = b.cls_name === "motorcycle" ? "#1f2937" : "#2563eb";
-        ctx.fillRect(b.x1, b.y1, w, h);
-        // Windshield / rear window
-        ctx.fillStyle = "#93c5fd";
-        ctx.fillRect(b.x1 + w * 0.15, b.y1 + h * 0.12, w * 0.7, h * 0.28);
-        // Taillights
-        ctx.fillStyle = "#ef4444";
-        ctx.fillRect(b.x1 + 4, b.y1 + h * 0.55, w * 0.2, h * 0.12);
-        ctx.fillRect(b.x2 - w * 0.2 - 4, b.y1 + h * 0.55, w * 0.2, h * 0.12);
-      }
-
-      syntheticDetectionsByFrame.push({ t, boxes: frameBoxes });
-      await new Promise((r) => setTimeout(r, 12));
+    // Pace against the wall clock: one frame per 1/fps second, drifting delays
+    // corrected, so the recorded file really is DURATION_S long.
+    for (let f = 1; f < totalFrames; f++) {
+      const wait = startedAt + f * frameMs - performance.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      drawDemoFrame(ctx, proj, f / fps);
+      if (onProgress && f % 25 === 0) onProgress(f / totalFrames);
     }
-
+    await new Promise((resolve) => setTimeout(resolve, frameMs * 2));
     recorder.stop();
-    const blob = await donePromise;
-    blob._syntheticDetections = syntheticDetectionsByFrame;
+    if (onProgress) onProgress(1);
+
+    const blob = await stopped;
+    blob._syntheticDetections = demoSyntheticDetections(width, height, fps, durationS);
     return blob;
   }
 
   global.MotoTrackEngine = {
     CONFIG,
+    DEMO_CLIP,
     SimpleByteTracker,
     DetectionSmoother,
     ClosingRateTracker,
@@ -1099,6 +1483,8 @@
     renderTimelineDataUrl,
     mapPredictionsToDetections,
     generateDemoVideoBlob,
+    demoBoxesAt,
+    demoSyntheticDetections,
   };
 })(window);
 

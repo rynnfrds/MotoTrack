@@ -104,7 +104,11 @@ Vercel web app runs **100% client-side in the browser**:
   of MotoTrack's pinhole distance estimation, relative ego-corridor trapezoid,
   scale-invariant gap ratio, EMA box smoothing + 0.4 s dropout coasting, and
   calibrated `1.8 / 0.4` verdict hysteresis. Also includes a 1-click **Demo Traffic Clip**
-  generator so visitors can test the pipeline without uploading a file.
+  generator: a deterministic 30 s POV clip (960x540, 25 fps, drawn live with
+  `MediaRecorder`) whose actors are placed in metres and projected through the
+  same pinhole model the engine uses, so SAFE / TIGHT / BLOCKED all occur and the
+  boxes land where the vehicles are. Recording a real 30 s file costs 30 s of wall
+  clock; the progress bar shows the recording pass, then the 10 fps analysis pass.
 - **Hybrid FastAPI Backend (optional):** Expand *Execution Mode & Remote Backend*
   in the UI and paste your local or tunnelled `mototrack web` URL to run native
   YOLO26n checkpoints (`coco` or `mixed`) on your own server.

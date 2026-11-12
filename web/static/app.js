@@ -123,6 +123,54 @@ function seekVideo(video, timeSec) {
   });
 }
 
+// MediaRecorder writes a WebM without a Duration element, so `video.duration`
+// is Infinity until the browser has demuxed it. Seeking far past the end makes
+// Chrome compute the real duration; without that, analysis silently truncated
+// to the old 12 s fallback and the scrubber had no range.
+function ensureFiniteDuration(video) {
+  const known = () => Number.isFinite(video.duration) && video.duration > 0;
+  if (known()) return Promise.resolve(video.duration);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      video.removeEventListener("timeupdate", onDurationChange);
+      video.removeEventListener("durationchange", onDurationChange);
+      clearTimeout(timer);
+      try {
+        video.currentTime = 0;
+      } catch (error) {
+        /* seeking can fail while the stream is still parsing */
+      }
+      resolve(value);
+    };
+    const onDurationChange = () => {
+      if (known()) finish(video.duration);
+    };
+    const timer = setTimeout(() => finish(known() ? video.duration : 0), 2000);
+    video.addEventListener("timeupdate", onDurationChange);
+    video.addEventListener("durationchange", onDurationChange);
+    try {
+      video.currentTime = 1e7;
+    } catch (error) {
+      finish(0);
+    }
+  });
+}
+
+function declaredDuration(file) {
+  if (Number.isFinite(file._durationSeconds) && file._durationSeconds > 0) {
+    return file._durationSeconds;
+  }
+  const frames = file._syntheticDetections;
+  if (Array.isArray(frames) && frames.length > 1) {
+    const span = frames[frames.length - 1].t - frames[0].t;
+    if (Number.isFinite(span) && span > 0) return span;
+  }
+  return 0;
+}
+
 async function runInBrowserAnalysis(file, detectorKind, maxSeconds) {
   const Engine = window.MotoTrackEngine;
   const CONFIG = Engine.CONFIG;
@@ -153,7 +201,8 @@ async function runInBrowserAnalysis(file, detectorKind, maxSeconds) {
 
   const width = video.videoWidth || 640;
   const height = video.videoHeight || 360;
-  const rawDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 12.0;
+  const probedDuration = await ensureFiniteDuration(video);
+  const rawDuration = probedDuration || declaredDuration(file) || 12.0;
   const analysedSeconds = Math.min(rawDuration, maxSeconds);
   const analysisFps = CONFIG.ANALYSIS_FPS;
   const totalTicks = Math.max(1, Math.floor(analysedSeconds * analysisFps));
@@ -524,6 +573,13 @@ function showResultView(res) {
   timeline.src = res.timelineDataUrl;
   playhead.hidden = false;
 
+  // A recorded WebM has no Duration element, so the native scrubber would show
+  // no total length. Resolve it once, then rewind so playback starts at 0.
+  ensureFiniteDuration(player).then((duration) => {
+    if (duration > 0) activeDuration = duration;
+    redrawPlayerOverlay();
+  });
+
   const summary = res.summary || {};
   const analysis = summary.analysis || {};
   const video = summary.video || {};
@@ -647,12 +703,22 @@ demoBtn.addEventListener("click", async () => {
   showError("");
   statusEl.hidden = false;
   livePreviewWrap.hidden = true;
-  statusText.textContent = "Generating 12 s traffic POV simulation clip...";
-  statusPct.textContent = "";
-  fill.style.width = "15%";
+
+  const demoClip = window.MotoTrackEngine.DEMO_CLIP;
+  const demoSeconds = demoClip ? demoClip.DURATION_S : 30;
+  statusText.textContent = `Recording ${demoSeconds}s traffic POV simulation...`;
+  statusPct.textContent = "0%";
+  fill.style.width = "0%";
 
   try {
-    const blob = await window.MotoTrackEngine.generateDemoVideoBlob();
+    const blob = await window.MotoTrackEngine.generateDemoVideoBlob({
+      onProgress: (fraction) => {
+        const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+        fill.style.width = `${pct}%`;
+        statusPct.textContent = `${pct}%`;
+        statusText.textContent = `Recording ${demoSeconds}s traffic POV simulation...`;
+      },
+    });
     const demoFile = new File([blob], "demo_traffic_pov.webm", {
       type: blob.type || "video/webm",
     });
@@ -660,7 +726,7 @@ demoBtn.addEventListener("click", async () => {
     setFile(demoFile);
 
     const detectorKind = document.getElementById("detector").value;
-    const result = await runInBrowserAnalysis(demoFile, detectorKind, 15);
+    const result = await runInBrowserAnalysis(demoFile, detectorKind, demoSeconds);
     showResultView(result);
   } catch (error) {
     statusEl.hidden = true;
