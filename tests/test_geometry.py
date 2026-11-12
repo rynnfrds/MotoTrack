@@ -127,6 +127,33 @@ def test_object_parked_at_frame_edge_does_not_block():
     assert not is_blocking_candidate(det(10, 500, 90, 576), W, H)
 
 
+def test_truck_beside_the_corridor_still_narrows_it():
+    # Portrait motorcycle footage: the rider squeezes between two lorries.
+    # Each lorry's bottom-centre sits outside the narrow corridor, so a
+    # bottom-centre containment test reported an empty corridor and a free
+    # 720 px gap, while the visible slot was about 1.5 m wide. The box's
+    # horizontal extent must count even when its centre does not.
+    y = 640
+    bounds = corridor_x_bounds(y / H)
+    left_px, right_px = bounds[0] * W, bounds[1] * W
+    left_lorry = det(left_px - 260, 100, left_px + 40, y)
+    assert left_lorry.bottom_center_x / W < bounds[0]
+    assert is_blocking_candidate(left_lorry, W, H)
+
+
+def test_object_entirely_left_of_the_corridor_does_not_block():
+    y = 640
+    bounds = corridor_x_bounds(y / H)
+    left_px = bounds[0] * W
+    parked = det(left_px - 300, 100, left_px - 20, y)
+    assert not is_blocking_candidate(parked, W, H)
+
+
+def test_object_above_the_horizon_does_not_block():
+    # A gantry or bridge deck at the top of the frame is not on the road.
+    assert not is_blocking_candidate(det(600, 40, 700, 140), W, H)
+
+
 def test_ego_bodywork_is_ignored():
     # spans 90% of the frame width and is anchored at the bottom edge
     ego_box = det(64, 640, 1216, 706)

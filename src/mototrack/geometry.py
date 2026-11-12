@@ -149,20 +149,38 @@ def is_ego_bodywork(
 
 
 def is_blocking_candidate(det: Detection, image_width_px: float, image_height_px: float) -> bool:
-    """Ground-contact test: does this object sit on the road ahead of me?
+    """Does this object occupy any part of the corridor ahead of me?
 
-    Uses the bottom-centre of the box, not the centre, because the centre of a
-    far-away box drifts upward while its wheels stay on the road.
+    Two conditions, both required:
+
+    * ground contact: the box's bottom edge sits below the horizon, i.e. the
+      object is on the road rather than up in the sky or on a bridge deck;
+    * lateral overlap: the box's x-range intersects the corridor's x-range at
+      that height.
+
+    Overlap, not bottom-centre containment. Bottom-centre was the first version
+    and it holds up for a dashcam looking down a lane, where side traffic sits
+    outside the corridor. It fails for ego-POV portrait footage of a motorcycle
+    weaving between two trucks: each truck's bottom-centre falls outside the
+    narrow corridor, so both are discarded and the corridor is reported empty
+    while the rider is in fact squeezing through a 1.5 m slot. Using the box's
+    actual horizontal extent counts the trucks that really do narrow the slot.
     """
     if image_width_px <= 0 or image_height_px <= 0:
         return False
     if det.width <= 0 or det.height <= 0:
         return False
-    x_frac = det.bottom_center_x / image_width_px
     y_frac = det.bottom_y / image_height_px
+    if y_frac < config.CORRIDOR_HORIZON_Y or y_frac > 1.0:
+        return False
     if is_ego_bodywork(det, image_height_px, image_width_px):
         return False
-    return point_in_corridor(x_frac, y_frac)
+    bounds = corridor_x_bounds(y_frac)
+    if bounds is None:
+        return False
+    corridor_left_px = bounds[0] * image_width_px
+    corridor_right_px = bounds[1] * image_width_px
+    return det.x1 < corridor_right_px and det.x2 > corridor_left_px
 
 
 # --- Free gap ---------------------------------------------------------------

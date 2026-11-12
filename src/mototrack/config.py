@@ -149,9 +149,14 @@ EGO_MASK_MIN_WIDTH_FRAC = 0.75
 # depth band, so it is scale invariant and needs no camera calibration.
 #
 # These are fitted, not guessed: scripts/calibrate.py swept threshold pairs
-# against 29 hand-labelled frames and 1.8 / 0.4 maximised agreement while still
+# against hand-labelled frames and 1.8 / 0.4 maximised agreement while still
 # never calling a frame SAFE that a human called BLOCKED. Re-run that script
 # whenever the gold set grows; the numbers below are only as good as it is.
+#
+# On the current 30-frame gold set (portrait ego-POV footage) the sweep found a
+# plateau: every pair with safe_ratio in 1.0-1.8 scored the same, so 1.8 was kept
+# as the more conservative end of that plateau rather than being re-tuned to a
+# value the data cannot distinguish.
 
 VERDICT_SAFE_RATIO = 1.8
 VERDICT_TIGHT_RATIO = 0.4

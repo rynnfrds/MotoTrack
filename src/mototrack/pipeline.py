@@ -350,7 +350,10 @@ def analyse(
         "caveats": [
             "Distances are monocular estimates from assumed object heights, not sensor readings.",
             "Verdict describes free lateral space in the ego corridor, not overall traffic safety.",
-            "Pretrained COCO weights were not fine-tuned on this footage; no mAP claim is made here.",
+            (
+                f"The {detector_kind} checkpoint is third-party and was not fine-tuned on this "
+                "footage; no mAP claim is made here."
+            ),
         ],
     }
 

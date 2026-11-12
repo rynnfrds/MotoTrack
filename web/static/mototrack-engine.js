@@ -157,9 +157,16 @@
     const h = Math.max(0, det.y2 - det.y1);
     if (w <= 0 || h <= 0) return false;
     if (isEgoBodywork(det, imageHeightPx, imageWidthPx)) return false;
-    const xFrac = ((det.x1 + det.x2) / 2.0) / imageWidthPx;
     const yFrac = det.y2 / imageHeightPx;
-    return pointInCorridor(xFrac, yFrac);
+    if (yFrac < CONFIG.CORRIDOR_HORIZON_Y || yFrac > 1.0) return false;
+    // Lateral overlap, not bottom-centre containment. Portraits of a rider
+    // squeezing between two trucks put each truck's bottom-centre outside the
+    // narrow corridor, and containment would then report an empty corridor.
+    const bounds = corridorXBounds(yFrac);
+    if (!bounds) return false;
+    const corridorLeftPx = bounds[0] * imageWidthPx;
+    const corridorRightPx = bounds[1] * imageWidthPx;
+    return det.x1 < corridorRightPx && det.x2 > corridorLeftPx;
   }
 
   function mergeIntervals(intervals) {
