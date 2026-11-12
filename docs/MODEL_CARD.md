@@ -47,9 +47,15 @@ experiments. The shipped pipeline uses the pinhole estimate below instead.
    `distance_m = (real_height_m * focal_px) / box_height_px`, with
    `focal_px = (width_px / 2) / tan(hfov / 2)` and an assumed horizontal field
    of view of 78 degrees. Assumed heights per class live in `config.py`.
-3. Keep objects whose **bottom-centre** sits inside the ego corridor, which is a
-   trapezoid fixed in relative frame coordinates. Bottom-centre is used because
-   the centre of a distant box drifts upward while its wheels stay on the road.
+3. Keep objects whose **horizontal extent overlaps** the ego corridor at the
+   object's ground-contact row, where the corridor is a trapezoid fixed in
+   relative frame coordinates. The earlier version tested the box's bottom-centre
+   point for containment. That works for a dashcam looking down a lane, but it
+   discards side traffic in portrait ego-POV footage: a lorry running alongside a
+   rider has its bottom-centre outside the narrow corridor, so the corridor was
+   reported empty while the rider was squeezing through a 1.5 m slot. Overlap
+   counts those lorries. A horizon check keeps gantries and bridge decks, which
+   are above the road, out of the count.
 4. At the nearest occupied depth band, subtract the blocked x-intervals from the
    corridor to get the free gaps, and take the widest.
 5. Normalise: `gap_ratio = widest_free_gap_px / median_vehicle_width_px` **at the
@@ -62,13 +68,30 @@ experiments. The shipped pipeline uses the pinhole estimate below instead.
 
 ### Why the thresholds are fitted, not chosen
 
-The first values were guesses (1.6 / 1.2). `scripts/calibrate.py` swept 780
-threshold pairs against the hand-labelled gold set and selected **1.8 / 0.4** as
-the pair maximising agreement while never calling a frame `SAFE` that the human
-called `BLOCKED`. That constraint is deliberate: a false `SAFE` invites a rider
-to commit to a manoeuvre they cannot abort, while a false `BLOCKED` only costs
-time. `tests/test_verdict.py` asserts the shipped numbers so they cannot silently
-revert to guesses.
+The first values were guesses (1.6 / 1.2). `scripts/calibrate.py` sweeps 780
+threshold pairs against the hand-labelled gold set and selects the pair maximising
+agreement while never calling a frame `SAFE` that the human called `BLOCKED`. That
+constraint is deliberate: a false `SAFE` invites a rider to commit to a manoeuvre
+they cannot abort, while a false `BLOCKED` only costs time.
+
+On the current 30-frame gold set the sweep reports a **plateau** rather than a
+single winner: every `safe_ratio` from 1.0 to 1.8 with `tight_ratio` 0.4 scores the
+same. The shipped pair stays at 1.8, the conservative end of that plateau, because
+the data cannot distinguish the candidates inside it and a lower bar would call a
+corridor clear on less evidence. `tests/test_verdict.py` asserts the shipped
+numbers so they cannot silently revert to guesses.
+
+## Training data and provenance of the clip
+
+The clip used for evaluation is third-party footage from a public YouTube Short
+(`youtube.com/shorts/5zzcCtHc3xg`, "macet nyalip motovlog viral"). It is not
+openly licensed. It is not redistributed in this repository; `data/raw/`,
+`data/gold/` and `out/` are gitignored, and the frame indices in
+`data/gold/gold.csv` refer to that exact file.
+
+Anyone re-running the evaluation must supply their own clip and re-label the gold
+set. The numbers in `docs/METRICS.md` are evidence about this footage, not a
+claim about ego-POV motorcycle video in general.
 
 ## Failure modes, explicitly
 
@@ -78,6 +101,8 @@ revert to guesses.
 | Camera roll while leaning | The corridor is frame-fixed, so a lean rotates the road out of it. Documented, not corrected by default. |
 | Oncoming traffic | Not modelled. The verdict only describes space ahead in your corridor. |
 | Side-lane entry, vehicles about to change lane | Not modelled. There is no motion prediction of other road users. |
+| Traffic in the opposite lane | Not modelled as a separate lane. An oncoming vehicle that overlaps the corridor counts as an obstacle, which fails toward caution. |
+| Two lorries closing in on both sides | Detected as two blocked intervals with one narrow free gap between them. This is the case that exposed the bottom-centre bug: the gap is measured correctly only because each lorry's box extent now counts. |
 | A bus where a car is expected | `4-wheeler` unifies sedans through buses, so assumed height is wrong and the metre estimate degrades. The band and the ratio are more robust than the metre figure. |
 | Ego bike bodywork in frame | Discounted only when the box is anchored at the bottom edge **and** spans 75% or more of frame width, so a genuinely close vehicle is never masked away. |
 | Portrait 9:16 footage | Supported; the corridor is defined in relative coordinates. |

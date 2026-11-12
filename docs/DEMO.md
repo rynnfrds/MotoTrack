@@ -60,9 +60,15 @@ which matters when port 8770 is already busy.
 
 ## What to say when someone asks how accurate it is
 
-Point at `docs/METRICS.md` and read it out: 69% binary accuracy on 29
-hand-labelled frames from one clip, thresholds fitted on that same data, 3-class
-accuracy of 41% which is not usable. The honest framing is the interesting part.
+Point at `docs/METRICS.md` and read it out: 100% binary accuracy on 24 scored
+frames out of 30 hand-labelled ones, from one clip, with thresholds fitted on that
+same data; 3-class accuracy of 41.7%; TIGHT recall 6.7%, so nearly every narrow
+slot is reported as blocked. The honest framing is the interesting part.
+
+Say the second half too: that 100% means the rule never contradicted the labeller
+about SAFE versus not-SAFE, and it was 45.8% before the corridor test was fixed to
+count side traffic. The jump is evidence the fix was real, and evidence the number
+is fragile with 30 frames.
 
 ## Known-awkward moments in a live demo
 
@@ -72,13 +78,19 @@ accuracy of 41% which is not usable. The honest framing is the interesting part.
   it has a window of evidence. That is intended, not a bug.
 - **A held verdict can disagree with the frame underneath** near a transition.
   The HUD says so explicitly: `holding SAFE (frame reads TIGHT)`.
+- **Portrait clip on a landscape screen.** The default clip is 720x1280. The web
+  page letterboxes it; that is the source aspect ratio, not a layout bug.
 
 ## Regenerating the artefacts
 
 ```bash
 .venv/Scripts/python.exe -m mototrack.cli analyze data/raw/clip_001.mp4 \
-  --detector mixed -o out/demo
+  --detector coco -o out/demo
 ```
 
 Produces `annotated.mp4`, `events.json`, `summary.json`, `timeline.png` in
 `out/demo/`.
+
+The default clip is third-party YouTube footage, not openly licensed. It is kept
+out of git along with the gold set, so a fresh clone has neither. See the
+"Provenance and licence" section of `docs/METRICS.md`.

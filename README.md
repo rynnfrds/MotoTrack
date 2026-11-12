@@ -134,16 +134,23 @@ the same gold set and reports which won on your footage:
 .venv/Scripts/python.exe -m mototrack.cli compare-detectors
 ```
 
+On the default clip, `coco` wins: 100.0% binary accuracy and 41.7% 3-class over
+24 scored frames, against 74.1% and 37.0% for `mixed`. On the previous clip the
+ranking was reversed. That is the harness doing its job, and it is why the winner
+is measured per footage rather than assumed.
+
 ## Measuring it honestly
 
 ```bash
 # 1. sample frames and render a contact sheet
-.venv/Scripts/python.exe scripts/make_gold.py data/raw/clip_001.mp4 --count 60
+.venv/Scripts/python.exe scripts/make_gold.py data/raw/clip_001.mp4 --count 30
 # 2. label each row in data/gold/gold.csv as SAFE / TIGHT / BLOCKED
 # 3. score
-.venv/Scripts/python.exe -m mototrack.cli eval --detector mixed
+.venv/Scripts/python.exe -m mototrack.cli eval --detector coco
 # 4. fit thresholds to that data instead of guessing them
-.venv/Scripts/python.exe scripts/calibrate.py --detector mixed
+.venv/Scripts/python.exe scripts/calibrate.py --detector coco
+# 5. re-measure the display defects on this footage
+.venv/Scripts/python.exe scripts/measure_display.py
 ```
 
 Current numbers are in [docs/METRICS.md](docs/METRICS.md). They are measured on
@@ -166,7 +173,7 @@ A negative result is a valid outcome. Write it down either way.
 .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-115 tests. Geometry, verdict logic and temporal smoothing are pure functions
+118 tests. Geometry, verdict logic and temporal smoothing are pure functions
 tested against hand-computed layouts; the pipeline and overlay tests decode the
 real output video; the API tests run in-process via `TestClient` and never bind
 a port.
@@ -185,7 +192,7 @@ src/mototrack/
   evaluate.py    gold-set scoring and confusion matrices
   cli.py         analyze / preview-corridor / eval / compare-detectors / web
 app/             FastAPI upload UI
-scripts/         fetch_models, make_gold, calibrate, smoke_detect
+scripts/         fetch_models, make_gold, calibrate, measure_display, smoke_detect
 ```
 
 ## Limits, stated up front
@@ -195,7 +202,16 @@ scripts/         fetch_models, make_gold, calibrate, smoke_detect
 - "Safe" means free space in *your* corridor. It says nothing about oncoming
   traffic, a vehicle about to change lanes, or road surface.
 - Pretrained weights were not fine-tuned on this footage. No mAP is claimed.
-- CPU-only throughout: expect roughly 85-95 ms per analysed frame.
+- CPU-only throughout: expect roughly 65-80 ms per analysed frame on portrait
+  720x1280 footage, which is about 5-6 fps wall clock.
+
+## The default clip
+
+`data/raw/clip_001.mp4` is third-party footage from a public YouTube Short
+(`youtube.com/shorts/5zzcCtHc3xg`), not openly licensed and not redistributed
+here. It lives outside git along with the gold set. To reproduce the numbers,
+obtain that clip, or any portrait ego-POV clip, and re-label the gold set for it;
+frame indices in `data/gold/gold.csv` refer to one exact file.
 
 Licensing: the Ultralytics package and both checkpoints are AGPL-3.0. See
 [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
