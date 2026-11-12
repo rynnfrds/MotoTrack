@@ -22,7 +22,20 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
 def _text(frame, text, org, scale, color, thickness=2):
-    cv2.putText(frame, text, org, FONT, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+    """Legible text: a dark halo behind the coloured glyphs.
+
+    Only for text drawn straight onto footage, where the background is whatever
+    the camera saw. HUD text sits on the dark panel and must not use this: the
+    halo pass and the glyph pass land on different pixels at small scales, which
+    prints every line twice with a visible ghost one glyph to the right.
+    """
+    halo = thickness + 1 if scale < 0.7 else thickness + 2
+    cv2.putText(frame, text, org, FONT, scale, (0, 0, 0), halo, cv2.LINE_AA)
+    cv2.putText(frame, text, org, FONT, scale, color, thickness, cv2.LINE_AA)
+
+
+def _panel_text(frame, text, org, scale, color, thickness=1):
+    """Text on the HUD panel. One pass; the panel already supplies contrast."""
     cv2.putText(frame, text, org, FONT, scale, color, thickness, cv2.LINE_AA)
 
 
@@ -83,6 +96,32 @@ def _dashed_rect(
         cv2.line(frame, (x2, y), (x2, min(y + dash, y2)), color, thickness, cv2.LINE_AA)
 
 
+def _fit_scale(
+    text: str,
+    max_width_px: float,
+    base_scale: float,
+    thickness: int = 1,
+) -> float:
+    """Largest font scale at or below base_scale whose text fits max_width_px.
+
+    Portrait frames are only ~720 px wide, so a panel sized as a fraction of
+    width leaves less room than landscape footage did. Scaling down per line is
+    cheaper than truncating the evidence string, and it keeps the HUD readable
+    instead of letting it run off the panel and collide with the box labels.
+    """
+    if not text or max_width_px <= 0:
+        return base_scale
+    scale = base_scale
+    for _ in range(24):
+        (width_px, _height_px), _baseline = cv2.getTextSize(
+            text, FONT, scale, thickness
+        )
+        if width_px <= max_width_px or scale <= 0.22:
+            break
+        scale *= 0.92
+    return scale
+
+
 def draw_hud(
     frame: np.ndarray,
     verdict: str,
@@ -101,28 +140,28 @@ def draw_hud(
     scale = max(0.5, height / 900.0)
     color = VERDICT_COLORS.get(verdict, VERDICT_COLORS[config.VERDICT_UNKNOWN])
 
-    panel_w = min(int(width * 0.62), 520)
-    panel_h = int(96 * scale)
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (panel_w, panel_h), (18, 18, 18), -1)
-    cv2.addWeighted(overlay, 0.62, frame, 0.38, 0.0, dst=frame)
-    cv2.rectangle(frame, (0, 0), (panel_w, panel_h), color, 2)
+    # Panel spans the frame width on narrow (portrait) footage: 62% of 720 px is
+    # not enough for the evidence line at any readable size.
+    panel_w = min(int(width * (0.98 if height > width else 0.62)), 560)
+    pad = int(10 * scale)
+    inner = panel_w - 2 * pad
 
-    _text(frame, verdict, (14, int(34 * scale)), 0.95 * scale, color, 2)
-
+    lines: list[tuple[str, float, int, tuple]] = [
+        (verdict, 0.95 * scale, 2, color),
+    ]
     if gap.n_candidates == 0:
         detail = "this frame: corridor empty"
     elif not math.isfinite(gap.gap_ratio):
         detail = "this frame: gap unbounded"
     else:
         detail = f"this frame: gap {gap.gap_ratio:.2f} vehicle-widths"
-    _text(frame, detail, (14, int(58 * scale)), 0.5 * scale, (240, 240, 240), 1)
+    lines.append((detail, 0.5 * scale, 1, (240, 240, 240)))
 
     if gap.gap_m is not None:
         caveat = f"~{gap.gap_m:.1f} m estimated, not a sensor"
     else:
         caveat = "range estimate unavailable"
-    _text(frame, caveat, (14, int(78 * scale)), 0.42 * scale, (185, 185, 185), 1)
+    lines.append((caveat, 0.42 * scale, 1, (185, 185, 185)))
 
     if raw_verdict and raw_verdict != verdict:
         stamp = f"holding {verdict} (frame reads {raw_verdict})"
@@ -130,7 +169,33 @@ def draw_hud(
         stamp = reason or ""
     if t_seconds is not None:
         stamp = f"t={t_seconds:5.1f}s  {stamp}".rstrip()
-    _text(frame, stamp, (14, int(94 * scale)), 0.38 * scale, (150, 150, 150), 1)
+    lines.append((stamp, 0.38 * scale, 1, (150, 150, 150)))
+
+    # Measure with the fitted scale so the panel height follows the real layout
+    # instead of a fixed 96 px that overlapped lines on portrait frames.
+    laid_out = []
+    y = 0
+    for text, base, thickness, colour in lines:
+        if not text:
+            continue
+        fitted = _fit_scale(text, inner, base, thickness)
+        (_tw, th), _bl = cv2.getTextSize(text, FONT, fitted, thickness)
+        # 1.75x the glyph height leaves a clear gap between baselines; the old
+        # fixed 96 px panel held four lines only at landscape sizes.
+        y += int(th * 1.75) + int(6 * scale)
+        laid_out.append((text, fitted, thickness, colour, y))
+
+    panel_h = y + int(10 * scale)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (panel_w, panel_h), (18, 18, 18), -1)
+    # Near-opaque: on portrait footage the panel spans most of the frame width,
+    # and at 0.62 alpha the box labels drawn earlier bled through behind the HUD
+    # text, which read as extra stray glyphs rather than as background.
+    cv2.addWeighted(overlay, 0.9, frame, 0.1, 0.0, dst=frame)
+    cv2.rectangle(frame, (0, 0), (panel_w, panel_h), color, 2)
+
+    for text, fitted, thickness, colour, y in laid_out:
+        _panel_text(frame, text, (pad, y), fitted, colour, thickness)
 
 
 def annotate(

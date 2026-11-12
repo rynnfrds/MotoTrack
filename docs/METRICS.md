@@ -92,15 +92,20 @@ Rows are the human label, columns the prediction.
 
 | Metric | `coco` | `mixed` |
 |---|---|---|
-| Mean latency | 64.7 ms per analysed frame | 79.0 ms per analysed frame |
-| p95 latency | 92.8 ms | not recorded |
-| Wall throughput | 5.92 fps at `imgsz=640`, CPU | 5.42 fps |
+| Mean latency | 50.2 ms per analysed frame | 53.4 ms per analysed frame |
+| Wall throughput | 8.36 fps at `imgsz=640`, CPU | 7.73 fps |
 | Analysis rate | 10 fps regardless of source rate | same |
-| This 37 s clip end to end | 62.7 s | 68.5 s |
+| This 37 s clip end to end | 44.35 s | 48.01 s |
+
+These were taken from consecutive runs on the same machine, and that matters: the
+first run after a fresh model load recorded 106.7 ms per frame, then 81.0, then
+50.2 for the same work. Reporting only the best number would be a lie of
+selection, and reporting only the worst would misrepresent steady state, so both
+checkpoints here come from the warm runs and the spread is written down.
 
 The clip is portrait 720x1280, so more pixels are pushed through the detector per
-frame than the previous 640x480 clip and throughput is lower. A 90 s clip takes
-roughly 150 s. The web UI caps uploads at 90 seconds for that reason.
+frame than the previous 640x480 clip. A 90 s clip takes roughly 100 s. The web UI
+caps uploads at 90 seconds for that reason.
 
 ## Verdict distribution on the default clip
 
