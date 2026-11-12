@@ -4,59 +4,200 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MotoTrack - bisa nyalip?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="head">
-      <p class="eyebrow">MotoTrack</p>
-      <h1>Bisa nyalip, atau engga?</h1>
-      <p class="lede">
-        Upload a motovlog POV clip. Every moment gets a verdict:
-        <strong>SAFE</strong>, <strong>TIGHT</strong>, or <strong>BLOCKED</strong>,
-        based on free space in your own corridor.
-      </p>
-    </header>
-
-    <form id="upload" class="panel" novalidate>
-      <div class="drop" id="drop">
-        <input type="file" id="file" name="file" accept="video/*" hidden>
-        <p class="drop-title">Drop a clip here, or <button type="button" class="link" id="browse">choose a file</button></p>
-        <p class="drop-meta" id="filename">no file selected</p>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="MotoTrack">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="27" height="27" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.18"></rect>
+          <path d="M6 21.5c5.2-1.6 10.8-1.6 16 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <path d="M10.5 21.5 12.6 9.5M17.5 21.5 15.4 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <circle cx="14" cy="6.4" r="1.9" fill="currentColor"></circle>
+        </svg>
+        <span class="brand-name">MotoTrack</span>
+        <button type="button" class="sheet-close" id="sheetClose" aria-label="Close menu">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        </button>
       </div>
+      <p class="brand-scope">Local server</p>
 
-      <div class="row">
-        <label class="field">
-          <span>Detector</span>
-          <select id="detector" name="detector">
-            {% for d in detectors %}
-            <option value="{{ d }}" {% if d == default_detector %}selected{% endif %}>{{ d }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <button type="submit" class="primary" id="submit" disabled>Analyse</button>
+      <p class="group-label">Clips</p>
+      <nav aria-label="Screens">
+        <a class="nav-item" href="/" aria-current="page">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h7l3 3.5-3 3.5H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path><path d="M12.5 7.2v1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          Analyse
+        </a>
+        <a class="nav-item" href="#" aria-disabled="true" title="Runs a clip first">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M6 6.6l3.4 2-3.4 2z" fill="currentColor"></path></svg>
+          Result
+        </a>
+      </nav>
+
+      <div class="bottom">
+        <p class="sidebar-note">
+          Native YOLO26n on this machine. A 30 s clip takes about half a minute on CPU.
+        </p>
       </div>
+    </aside>
 
-      <p class="hint">
-        Up to {{ max_mb }} MB, first {{ max_seconds }} seconds are analysed.
-        Long clips are truncated, not rejected.
-      </p>
-      <p class="error" id="error" role="alert" hidden></p>
-    </form>
+    <div class="canvas-wrap">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        </button>
+        <span class="screen-name">Analyse</span>
+      </header>
 
-    <section class="panel status" id="status" hidden>
-      <p class="status-line"><span id="statusText">Queued</span><span id="statusPct">0%</span></p>
-      <div class="bar"><div class="fill" id="fill"></div></div>
-      <p class="hint" id="statusHint">Detecting and tracking. This runs on CPU, so a 30 s clip takes about half a minute.</p>
-    </section>
+      <main class="canvas">
+        <div class="view-head">
+          <div class="title-row">
+            <h1>Bisa nyalip?</h1>
+            <div class="actions"><span class="stamp">10 frames a second</span></div>
+          </div>
+          <p class="sub">
+            Can I pass here, or not. Upload a POV clip and every analysed moment is read for the
+            free lateral space in your own corridor, then marked <strong>SAFE</strong>,
+            <strong>TIGHT</strong>, <strong>BLOCKED</strong>, or <strong>UNKNOWN</strong>.
+          </p>
+        </div>
 
-    <footer class="foot">
-      <p>
-        Verdicts describe free lateral space in the ego corridor, not overall traffic safety.
-        Ranges are monocular estimates, not sensor readings.
-      </p>
-    </footer>
-  </main>
+        <div class="grid">
+          <section class="panel col-12" aria-labelledby="clipHeading">
+            <header>
+              <h2 id="clipHeading">Analyse a clip</h2>
+              <span class="meta">MP4, MOV or WebM &middot; up to {{ max_mb }} MB</span>
+            </header>
+
+            <form id="upload" novalidate class="analyse-grid">
+              <div class="well" id="drop">
+                <input type="file" id="file" name="file" accept="video/*" hidden>
+                <p class="well-line">
+                  Drop a clip here, or
+                  <button type="button" class="link-button" id="browse">choose a file</button>.
+                </p>
+                <p class="well-file" id="filename">No file selected</p>
+              </div>
+
+              <div class="controls">
+                <div class="field">
+                  <label for="detector">Detector</label>
+                  <select class="input" id="detector" name="detector">
+                    {% for d in detectors %}
+                    <option value="{{ d }}" {% if d == default_detector %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                  </select>
+                  <span class="hint">coco is the default: it abdicated on 6 of 30 gold frames and never contradicted the labeller on the rest.</span>
+                </div>
+                <button type="submit" class="btn primary" id="submit" disabled>Analyse clip</button>
+                <p class="note">
+                  The first {{ max_seconds }} seconds are analysed. Long clips are truncated, not
+                  rejected, and this runs on CPU.
+                </p>
+                <p class="alert" id="error" role="alert" hidden></p>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel col-12" id="status" hidden aria-live="polite">
+            <div class="progress-head">
+              <span class="label" id="statusText">Queued</span>
+              <span class="progress-pct" id="statusPct">0%</span>
+            </div>
+            <div class="track"><span id="fill"></span></div>
+            <p class="note">Detecting and tracking. This runs on CPU, so a 30 s clip takes about half a minute.</p>
+          </section>
+
+          <section class="panel col-12" aria-labelledby="verdictHeading">
+            <header>
+              <h2 id="verdictHeading">How a verdict is read</h2>
+              <span class="meta">gap ratio = free space / median vehicle width</span>
+            </header>
+            <div class="key-grid">
+              <div class="key-item">
+                <span class="key-name"><i class="key-swatch sw-safe"></i>SAFE</span>
+                <span class="key-rule">Free gap at least <code>1.8</code> vehicle-widths at the nearest occupied depth band.</span>
+              </div>
+              <div class="key-item">
+                <span class="key-name"><i class="key-swatch sw-tight"></i>TIGHT</span>
+                <span class="key-rule">A gap between <code>0.4</code> and <code>1.8</code>; committing is a squeeze.</span>
+              </div>
+              <div class="key-item">
+                <span class="key-name"><i class="key-swatch sw-blocked"></i>BLOCKED</span>
+                <span class="key-rule">Under <code>0.4</code>, or the centre line is covered, or a blocker closes inside 1.5 s.</span>
+              </div>
+              <div class="key-item">
+                <span class="key-name"><i class="key-swatch sw-unknown"></i>UNKNOWN</span>
+                <span class="key-rule">Not enough evidence: the stabiliser abstains until its 2 s window fills.</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel col-12" aria-labelledby="corridorHeading">
+            <header>
+              <h2 id="corridorHeading">How the corridor is scored</h2>
+              <span class="meta">relative coordinates, no camera calibration</span>
+            </header>
+            <div class="verdict-explainer">
+              <figure class="corridor-figure">
+                <svg viewBox="0 0 320 172" role="img" aria-label="Ego corridor trapezoid with two road users beside a free gap of 1.9 vehicle widths">
+                  <rect x="0" y="0" width="320" height="172" fill="var(--raised)"></rect>
+                  <path d="M0 80h320" stroke="var(--control)" stroke-width="1"></path>
+                  <text x="8" y="76" font-size="11" fill="var(--faint)">horizon y = 0.45</text>
+                  <path d="M4 158 150 80M316 158 170 80" stroke="var(--control)" stroke-width="1" fill="none"></path>
+                  <path d="M120 158v-10M129 146v-8M138 135v-7M146 125v-6M154 116v-5M161 107v-4" stroke="var(--control)" stroke-width="1.5" fill="none"></path>
+                  <path d="M96 158 145.6 80 174.4 80 224 158Z" fill="rgba(29,95,191,0.10)" stroke="var(--accent)" stroke-width="1.25"></path>
+                  <rect x="102" y="124" width="34" height="30" fill="none" stroke="var(--text)" stroke-width="1.25"></rect>
+                  <rect x="186" y="120" width="30" height="26" fill="none" stroke="var(--text)" stroke-width="1.25"></rect>
+                  <path d="M140 164h42" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"></path>
+                  <text x="161" y="156" font-size="11" fill="var(--accent)" text-anchor="middle">gap 1.9</text>
+                  <path d="M148 158 156 149h14l8 9Z" fill="var(--text)"></path>
+                  <text x="6" y="154" font-size="11" fill="var(--faint)">ego</text>
+                </svg>
+                <figcaption>
+                  The bottom edge runs 0.30 to 0.70 of the frame width and narrows to the horizon at
+                  0.45, so one trapezoid serves 16:9 landscape and 9:16 reels.
+                </figcaption>
+              </figure>
+              <ol class="steps steps-1">
+                <li>
+                  <span class="step-num">1</span>
+                  <div>
+                    <h3>Detect and track</h3>
+                    <p>Six road-user classes, boxes smoothed with an EMA of <code>0.45</code> and coasted through 0.4 s of dropout.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-num">2</span>
+                  <div>
+                    <h3>Measure the nearest band</h3>
+                    <p>Users are bucketed at 3 m and 8 m from an assumed height; only the nearest occupied band is scored, and its free gap is divided by the median vehicle width there.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-num">3</span>
+                  <div>
+                    <h3>Stabilise</h3>
+                    <p>Fitted thresholds with centre-line and collision overrides, then a 2 s median and 0.5 s hysteresis on top.</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </section>
+        </div>
+
+        <p class="foot">
+          A verdict describes free lateral space in the ego corridor, not whether the pass is safe;
+          it is not rider assistance. Ranges come from assumed object heights and a 78&deg; horizontal
+          field of view, so treat metres as relative.
+        </p>
+      </main>
+    </div>
+  </div>
 <script src="/static/app.js"></script>
 </body>
 </html>

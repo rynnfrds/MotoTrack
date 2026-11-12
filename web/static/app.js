@@ -18,6 +18,15 @@ const fill = document.getElementById("fill");
 const livePreviewWrap = document.getElementById("livePreviewWrap");
 const liveCanvas = document.getElementById("liveCanvas");
 
+const sidebar = document.getElementById("sidebar");
+const menuToggle = document.getElementById("menuToggle");
+const sheetClose = document.getElementById("sheetClose");
+const navAnalyse = document.getElementById("navAnalyse");
+const navResult = document.getElementById("navResult");
+const navResultNote = document.getElementById("navResultNote");
+const screenName = document.getElementById("screenName");
+const scopeLine = document.getElementById("scopeLine");
+
 const backLink = document.getElementById("backLink");
 const newClipBtn = document.getElementById("newClipBtn");
 const resultTitle = document.getElementById("resultTitle");
@@ -27,16 +36,23 @@ const player = document.getElementById("player");
 const overlayCanvas = document.getElementById("overlayCanvas");
 const toggleHud = document.getElementById("toggleHud");
 const frameReadout = document.getElementById("frameReadout");
-const timeline = document.getElementById("timeline");
+const stripTrack = document.getElementById("stripTrack");
 const timelineWrap = document.getElementById("timelineWrap");
 const playhead = document.getElementById("playhead");
+const stripStart = document.getElementById("stripStart");
+const stripEnd = document.getElementById("stripEnd");
+const gapChartEl = document.getElementById("gapChart");
 const statsEl = document.getElementById("stats");
 const segTableBody = document.querySelector("#segTable tbody");
+const segCount = document.getElementById("segCount");
 
 let selected = null;
 let cocoModelPromise = null;
 let activeTicks = []; // [{ t, state }] for interactive playback interpolation
 let activeDuration = 1.0;
+let currentResult = null;
+let gapChartLabels = [];
+let gapChartValues = [];
 
 function showError(message) {
   errorEl.textContent = message;
@@ -74,15 +90,51 @@ drop.addEventListener("drop", (event) => {
   if (file) setFile(file);
 });
 
+function setScreen(which) {
+  const onResult = which === "result";
+  uploadView.hidden = onResult;
+  resultView.hidden = !onResult;
+  navAnalyse.setAttribute("aria-current", onResult ? "false" : "page");
+  navResult.setAttribute("aria-current", onResult ? "page" : "false");
+  navResult.setAttribute("aria-disabled", currentResult ? "false" : "true");
+  screenName.textContent = onResult ? "Result" : "Analyse";
+  document.title = onResult ? "MotoTrack - result" : "MotoTrack - can I pass here?";
+  closeMenu();
+}
+
 function switchToUpload() {
   player.pause();
-  resultView.hidden = true;
-  uploadView.hidden = false;
   statusEl.hidden = true;
   livePreviewWrap.hidden = true;
   submit.disabled = !selected;
   demoBtn.disabled = false;
+  setScreen("analyse");
 }
+
+function openMenu() {
+  sidebar.classList.add("open");
+  menuToggle.setAttribute("aria-expanded", "true");
+  sheetClose.focus();
+}
+
+function closeMenu() {
+  sidebar.classList.remove("open");
+  menuToggle.setAttribute("aria-expanded", "false");
+}
+
+menuToggle.addEventListener("click", openMenu);
+sheetClose.addEventListener("click", closeMenu);
+navAnalyse.addEventListener("click", (event) => {
+  event.preventDefault();
+  switchToUpload();
+});
+navResult.addEventListener("click", (event) => {
+  event.preventDefault();
+  if (currentResult) setScreen("result");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMenu();
+});
 
 backLink.addEventListener("click", (e) => {
   e.preventDefault();
@@ -494,12 +546,59 @@ async function runRemoteBackendAnalysis(baseUrl, file, detectorKind) {
 
 function stat(label, value) {
   const wrap = document.createElement("div");
+  wrap.className = "stat-row";
   const dt = document.createElement("dt");
   const dd = document.createElement("dd");
   dt.textContent = label;
   dd.textContent = value;
   wrap.append(dt, dd);
   return wrap;
+}
+
+function drawStrip(segments, totalSeconds) {
+  const total = totalSeconds > 0 ? totalSeconds : 1;
+  stripTrack.replaceChildren();
+  for (const seg of segments || []) {
+    const width = Math.max(0.2, ((seg.t1 - seg.t0) / total) * 100);
+    const el = document.createElement("span");
+    el.className = `strip-seg ${seg.verdict}`;
+    el.style.width = `${width}%`;
+    el.title = `${seg.t0.toFixed(1)}-${seg.t1.toFixed(1)} s: ${seg.verdict}`;
+    stripTrack.appendChild(el);
+  }
+}
+
+// The gap ratio over the clip: the one series that decides the verdict, in the style's one chart hue.
+function drawGapChart(ticks, totalSeconds) {
+  if (!window.Charts || !gapChartEl) return;
+  if (!ticks || ticks.length < 2) {
+    gapChartEl.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = "<b>No per-frame series</b><span>A server run bakes the overlay into the video and returns segments only.</span>";
+    gapChartEl.appendChild(empty);
+    return;
+  }
+  const stride = Math.max(1, Math.round(ticks.length / 60));
+  const labels = [];
+  const values = [];
+  for (let i = 0; i < ticks.length; i += stride) {
+    const ratio = ticks[i].state.gap && ticks[i].state.gap.gap_ratio;
+    labels.push(`${ticks[i].t.toFixed(1)}`);
+    values.push(Number.isFinite(ratio) ? Math.min(4, Number(ratio.toFixed(2))) : null);
+  }
+  Charts.line(gapChartEl, {
+    labels,
+    series: [{ name: "Free gap", values }],
+    format: (v) => `${v.toFixed(1)}\u00d7`,
+    tickFormat: (v) => `${v.toFixed(0)}\u00d7`,
+    height: 180,
+    max: 4,
+    reference: [
+      { value: 1.8, label: "SAFE 1.8" },
+      { value: 0.4, label: "BLOCKED 0.4" },
+    ],
+  });
 }
 
 function stateAtTime(t) {
@@ -534,11 +633,14 @@ function stateAtTime(t) {
 function redrawPlayerOverlay() {
   const ctx = overlayCanvas.getContext("2d");
   const t = player.currentTime || 0;
-  frameReadout.textContent = `t=${t.toFixed(1)}s`;
+  frameReadout.textContent = `t=${t.toFixed(1)} s`;
 
   const duration = player.duration || activeDuration || 1.0;
   if (duration > 0 && Number.isFinite(duration)) {
-    playhead.style.left = `${Math.min(100, (t / duration) * 100)}%`;
+    const frac = Math.min(100, (t / duration) * 100);
+    playhead.style.left = `${frac}%`;
+    timelineWrap.setAttribute("aria-valuenow", String(Math.round(frac)));
+    timelineWrap.setAttribute("aria-valuetext", `${t.toFixed(1)} s of ${duration.toFixed(1)} s`);
   }
 
   if (!activeTicks || !toggleHud.checked) {
@@ -556,11 +658,14 @@ function redrawPlayerOverlay() {
 }
 
 function showResultView(res) {
-  uploadView.hidden = true;
-  resultView.hidden = false;
+  currentResult = res;
+  setScreen("result");
+  navResult.setAttribute("aria-disabled", "false");
+  navResultNote.textContent = "ready";
 
   resultTitle.textContent = res.filename;
   resultEngineBadge.textContent = res.engineLabel;
+  scopeLine.textContent = res.engineLabel;
 
   activeTicks = res.ticks;
   activeDuration = res.analysedSeconds || 1.0;
@@ -570,8 +675,9 @@ function showResultView(res) {
   toggleHud.parentElement.hidden = !res.ticks;
 
   player.src = res.videoUrl;
-  timeline.src = res.timelineDataUrl;
   playhead.hidden = false;
+  stripStart.textContent = "0 s";
+  stripEnd.textContent = `${activeDuration.toFixed(1)} s`;
 
   // A recorded WebM has no Duration element, so the native scrubber would show
   // no total length. Resolve it once, then rewind so playback starts at 0.
@@ -584,37 +690,57 @@ function showResultView(res) {
   const analysis = summary.analysis || {};
   const video = summary.video || {};
   const shares = summary.verdict_share || {};
+  const seconds = summary.verdict_seconds || {};
 
-  const blockedShare = Math.round((shares.BLOCKED || 0) * 100);
-  const safeShare = Math.round((shares.SAFE || 0) * 100);
-  const tightShare = Math.round((shares.TIGHT || 0) * 100);
-  lede.textContent = `${safeShare}% of analysed time read SAFE, ${tightShare}% read TIGHT, ${blockedShare}% read BLOCKED.`;
+  const sharePct = (key) => Math.round((shares[key] || 0) * 100);
+  const safeShare = sharePct("SAFE");
+  const tightShare = sharePct("TIGHT");
+  const blockedShare = sharePct("BLOCKED");
+  const unknownShare = sharePct("UNKNOWN");
+
+  lede.textContent =
+    `${safeShare}% of analysed time read SAFE, ${tightShare}% TIGHT, ${blockedShare}% BLOCKED` +
+    `${unknownShare ? `, ${unknownShare}% UNKNOWN` : ""}.`;
+
+  document.getElementById("kpiSafe").innerHTML = `${safeShare}<small>%</small>`;
+  document.getElementById("kpiTight").innerHTML = `${tightShare}<small>%</small>`;
+  document.getElementById("kpiBlocked").innerHTML = `${blockedShare}<small>%</small>`;
+  document.getElementById("kpiUnknown").innerHTML = `${unknownShare}<small>%</small>`;
+  const secs = (key) => `${(seconds[key] || 0).toFixed(1)} s of ${res.analysedSeconds.toFixed(1)} s`;
+  document.getElementById("kpiSafeFoot").textContent = secs("SAFE");
+  document.getElementById("kpiTightFoot").textContent = secs("TIGHT");
+  document.getElementById("kpiBlockedFoot").textContent = secs("BLOCKED");
+  document.getElementById("kpiUnknownFoot").textContent = secs("UNKNOWN");
+
+  drawStrip(res.segments, res.analysedSeconds);
+  drawGapChart(res.ticks, res.analysedSeconds);
 
   statsEl.replaceChildren(
-    stat("Verdict SAFE", `${safeShare}% of time`),
-    stat("Verdict TIGHT", `${tightShare}% of time`),
-    stat("Verdict BLOCKED", `${blockedShare}% of time`),
-    stat("Verdict UNKNOWN", `${Math.round((shares.UNKNOWN || 0) * 100)}% of time`),
-    stat("Analysed", `${analysis.analysed_frames || 0} frames`),
-    stat("Throughput", `${analysis.wall_fps || 0} fps`),
-    stat("Latency", `${analysis.mean_latency_ms || 0} ms/frame`),
-    stat("Source", `${video.width || res.width}x${video.height || res.height}, ${video.duration_s || res.analysedSeconds}s`),
-    stat("Detector", summary.detector || "coco")
+    stat("Frames analysed", `${analysis.analysed_frames || 0} at ${analysis.analysed_fps || 10} fps`),
+    stat("Throughput", `${analysis.wall_fps || 0} frames/s`),
+    stat("Mean latency", `${analysis.mean_latency_ms || 0} ms`),
+    stat("p95 latency", `${analysis.p95_latency_ms || 0} ms`),
+    stat("Source", `${video.width || res.width} \u00d7 ${video.height || res.height}`),
+    stat("Detector", summary.detector || "coco"),
+    stat("Engine", summary.engine || "in-browser")
   );
 
-  // Populate segments table
+  const segments = res.segments || [];
+  segCount.textContent = segments.length === 1 ? "1 segment" : `${segments.length} segments`;
   segTableBody.replaceChildren();
-  for (const seg of res.segments || []) {
+  for (const seg of segments) {
     const tr = document.createElement("tr");
-    tr.className = "clickable";
-    tr.title = "Click to jump to this segment";
+    tr.title = "Jump to this segment";
+    const ids = seg.track_ids && seg.track_ids.length
+      ? seg.track_ids.map((id) => "#" + id).join(", ")
+      : "\u2014";
     tr.innerHTML = `
-      <td>${seg.t0.toFixed(1)}s – ${seg.t1.toFixed(1)}s</td>
-      <td><span class="pill ${seg.verdict}">${seg.verdict}</span></td>
-      <td>${seg.min_ratio != null ? seg.min_ratio.toFixed(2) : "—"}</td>
-      <td>${seg.frame_count}</td>
-      <td>${seg.track_ids && seg.track_ids.length ? seg.track_ids.map((id) => "#" + id).join(", ") : "—"}</td>
-      <td><code>${seg.reason || "—"}</code></td>
+      <td class="cell-head seg-time" data-label="Time">${seg.t0.toFixed(1)} \u2013 ${seg.t1.toFixed(1)} s</td>
+      <td class="cell-head" data-label="Verdict"><span class="pill ${seg.verdict}">${seg.verdict}</span></td>
+      <td class="n" data-label="Min gap">${seg.min_ratio != null ? seg.min_ratio.toFixed(2) : "\u2014"}</td>
+      <td class="n" data-label="Frames">${seg.frame_count}</td>
+      <td data-label="Blocking"><span class="track-ids">${ids}</span></td>
+      <td data-label="Reason"><span class="reason">${seg.reason || "\u2014"}</span></td>
     `;
     tr.addEventListener("click", () => {
       player.currentTime = seg.t0;
@@ -651,19 +777,35 @@ function animationLoop() {
 }
 requestAnimationFrame(animationLoop);
 
-timelineWrap.addEventListener("click", (event) => {
-  const rect = timeline.getBoundingClientRect();
+function seekFromPointer(clientX) {
+  const rect = timelineWrap.getBoundingClientRect();
   if (!rect.width) return;
-  // Margin proportions match renderTimelineDataUrl (60 left, 40 right out of 1200)
-  const leftFrac = 60 / 1200;
-  const plotFrac = (1200 - 100) / 1200;
-  const clickFrac = (event.clientX - rect.left) / rect.width;
-  const rel = Math.max(0, Math.min(1, (clickFrac - leftFrac) / plotFrac));
+  const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   const dur = player.duration || activeDuration || 1.0;
   if (Number.isFinite(dur) && dur > 0) {
-    player.currentTime = rel * dur;
+    player.currentTime = frac * dur;
     redrawPlayerOverlay();
   }
+}
+
+timelineWrap.addEventListener("click", (event) => seekFromPointer(event.clientX));
+timelineWrap.addEventListener("keydown", (event) => {
+  const dur = player.duration || activeDuration || 1.0;
+  if (!Number.isFinite(dur) || dur <= 0) return;
+  const step = event.shiftKey ? 5 : 1;
+  if (event.key === "ArrowRight") {
+    player.currentTime = Math.min(dur, (player.currentTime || 0) + step);
+  } else if (event.key === "ArrowLeft") {
+    player.currentTime = Math.max(0, (player.currentTime || 0) - step);
+  } else if (event.key === "Home") {
+    player.currentTime = 0;
+  } else if (event.key === "End") {
+    player.currentTime = dur;
+  } else {
+    return;
+  }
+  event.preventDefault();
+  redrawPlayerOverlay();
 });
 
 // --- Form Submission & Demo Trigger ---------------------------------------

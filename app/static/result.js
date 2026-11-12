@@ -15,6 +15,7 @@ const VERDICT_CLASS = { SAFE: "safe", TIGHT: "tight", BLOCKED: "blocked", UNKNOW
 
 function stat(label, value) {
   const wrap = document.createElement("div");
+  wrap.className = "stat-row";
   const dt = document.createElement("dt");
   const dd = document.createElement("dd");
   dt.textContent = label;
@@ -23,24 +24,49 @@ function stat(label, value) {
   return wrap;
 }
 
+const sidebar = document.getElementById("sidebar");
+const menuToggle = document.getElementById("menuToggle");
+const sheetClose = document.getElementById("sheetClose");
+function closeMenu() {
+  sidebar.classList.remove("open");
+  if (menuToggle) menuToggle.setAttribute("aria-expanded", "false");
+}
+if (menuToggle) {
+  menuToggle.addEventListener("click", () => {
+    sidebar.classList.add("open");
+    menuToggle.setAttribute("aria-expanded", "true");
+    if (sheetClose) sheetClose.focus();
+  });
+}
+if (sheetClose) sheetClose.addEventListener("click", closeMenu);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMenu();
+});
+
 function render(summary) {
   const analysis = summary.analysis || {};
   const video = summary.video || {};
   const shares = summary.verdict_share || {};
 
-  const blockedShare = Math.round((shares.BLOCKED || 0) * 100);
-  const safeShare = Math.round((shares.SAFE || 0) * 100);
-  lede.textContent = `${safeShare}% of analysed time read SAFE, ${blockedShare}% read BLOCKED.`;
+  const pct = (key) => Math.round((shares[key] || 0) * 100);
+  const safeShare = pct("SAFE");
+  const tightShare = pct("TIGHT");
+  const blockedShare = pct("BLOCKED");
+  const unknownShare = pct("UNKNOWN");
+  lede.textContent =
+    `${safeShare}% of analysed time read SAFE, ${tightShare}% TIGHT, ${blockedShare}% BLOCKED` +
+    `${unknownShare ? `, ${unknownShare}% UNKNOWN` : ""}.`;
+
+  document.getElementById("kpiSafe").innerHTML = `${safeShare}<small>%</small>`;
+  document.getElementById("kpiTight").innerHTML = `${tightShare}<small>%</small>`;
+  document.getElementById("kpiBlocked").innerHTML = `${blockedShare}<small>%</small>`;
+  document.getElementById("kpiUnknown").innerHTML = `${unknownShare}<small>%</small>`;
 
   statsEl.replaceChildren(
-    stat("Verdict SAFE", `${safeShare}% of time`),
-    stat("Verdict BLOCKED", `${blockedShare}% of time`),
-    stat("Verdict TIGHT", `${Math.round((shares.TIGHT || 0) * 100)}% of time`),
-    stat("Verdict UNKNOWN", `${Math.round((shares.UNKNOWN || 0) * 100)}% of time`),
-    stat("Analysed", `${analysis.analysed_frames || 0} frames`),
-    stat("Throughput", `${analysis.wall_fps || 0} fps`),
-    stat("Latency", `${analysis.mean_latency_ms || 0} ms/frame`),
-    stat("Source", `${video.width}x${video.height}, ${video.duration_s}s`),
+    stat("Frames analysed", `${analysis.analysed_frames || 0} at ${analysis.analysed_fps || 10} fps`),
+    stat("Throughput", `${analysis.wall_fps || 0} frames/s`),
+    stat("Mean latency", `${analysis.mean_latency_ms || 0} ms`),
+    stat("Source", `${video.width || "?"} \u00d7 ${video.height || "?"}`),
     stat("Detector", summary.detector || "unknown"),
   );
 }
@@ -86,7 +112,10 @@ function show(job) {
   document.getElementById("dlVideo").href = job.result.video;
   if (job.summary) render(job.summary);
 
-  timeline.addEventListener("load", () => { playhead.hidden = false; });
+  if (timeline && timeline.tagName === "IMG") {
+    timeline.addEventListener("load", () => { playhead.hidden = false; });
+    if (timeline.complete) playhead.hidden = false;
+  }
   player.addEventListener("timeupdate", () => {
     const duration = player.duration;
     if (!duration || !isFinite(duration)) return;

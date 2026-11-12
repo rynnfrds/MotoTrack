@@ -4,64 +4,172 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MotoTrack result - {{ job.filename }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="shell wide">
-    <header class="head">
-      <p class="eyebrow"><a href="/">MotoTrack</a></p>
-      <h1>{{ job.filename }}</h1>
-      <p class="lede" id="lede">Loading result...</p>
-    </header>
-
-    <section class="panel" id="loading">
-      <div class="bar"><div class="fill" id="fill"></div></div>
-      <p class="hint" id="progressText">Working...</p>
-    </section>
-
-    <section id="done" hidden>
-      <div class="panel video-panel">
-        <video id="player" controls playsinline preload="metadata"></video>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="MotoTrack">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="27" height="27" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.18"></rect>
+          <path d="M6 21.5c5.2-1.6 10.8-1.6 16 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <path d="M10.5 21.5 12.6 9.5M17.5 21.5 15.4 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <circle cx="14" cy="6.4" r="1.9" fill="currentColor"></circle>
+        </svg>
+        <span class="brand-name">MotoTrack</span>
+        <button type="button" class="sheet-close" id="sheetClose" aria-label="Close menu">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        </button>
       </div>
+      <p class="brand-scope">Local server</p>
 
-      <div class="panel">
-        <h2>Verdict timeline</h2>
-        <div class="timeline-wrap">
-          <img id="timeline" alt="Colour-coded verdict timeline across the clip">
-          <div class="playhead" id="playhead" hidden></div>
-        </div>
-        <div class="legend">
-          <span><i class="sw safe"></i>SAFE</span>
-          <span><i class="sw tight"></i>TIGHT</span>
-          <span><i class="sw blocked"></i>BLOCKED</span>
-          <span><i class="sw unknown"></i>UNKNOWN</span>
-        </div>
-      </div>
+      <p class="group-label">Clips</p>
+      <nav aria-label="Screens">
+        <a class="nav-item" href="/">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h7l3 3.5-3 3.5H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path><path d="M12.5 7.2v1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          Analyse
+        </a>
+        <a class="nav-item" href="#" aria-current="page">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M6 6.6l3.4 2-3.4 2z" fill="currentColor"></path></svg>
+          Result
+        </a>
+      </nav>
 
-      <div class="panel">
-        <h2>Numbers</h2>
-        <dl class="stats" id="stats"></dl>
-        <p class="hint">
-          Ranges are monocular estimates from assumed object heights and a 78 degree
-          field of view. Treat them as relative, not as measurements.
+      <div class="bottom">
+        <p class="sidebar-note">
+          Native YOLO26n on this machine. A 30 s clip takes about half a minute on CPU.
         </p>
       </div>
+    </aside>
 
-      <div class="panel">
-        <h2>Export</h2>
-        <div class="row">
-          <a class="ghost" id="dlEvents" download="events.json">events.json</a>
-          <a class="ghost" id="dlSummary" download="summary.json">summary.json</a>
-          <a class="ghost" id="dlVideo" download="annotated.mp4">annotated.mp4</a>
+    <div class="canvas-wrap">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        </button>
+        <span class="screen-name">Result</span>
+      </header>
+
+      <main class="canvas">
+        <div class="view-head">
+          <nav class="crumbs" aria-label="Breadcrumb">
+            <a class="parent" href="/">Analyse</a>
+            <span class="sep">/</span>
+            <span class="stamp">{% if job.detector %}{{ job.detector }}{% endif %}</span>
+          </nav>
+          <div class="title-row">
+            <h1>{{ job.filename }}</h1>
+            <div class="actions"><a class="btn" href="/">New clip</a></div>
+          </div>
+          <p class="sub" id="lede">Loading result</p>
         </div>
-      </div>
-    </section>
 
-    <section class="panel error-panel" id="failed" hidden>
-      <p class="error" id="failText"></p>
-      <p><a class="ghost" href="/">Try another clip</a></p>
-    </section>
-  </main>
+        <section class="panel" id="loading">
+          <div class="progress-head">
+            <span class="label">Analysing</span>
+            <span class="progress-pct" id="progressText">Queued</span>
+          </div>
+          <div class="track"><span id="fill"></span></div>
+        </section>
+
+        <section id="done" hidden>
+          <div class="kpis" style="margin-bottom:12px" aria-label="Verdict share of analysed time">
+            <div class="kpi">
+              <div class="kpi-label">SAFE</div>
+              <div class="kpi-value" id="kpiSafe">0<small>%</small></div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">TIGHT</div>
+              <div class="kpi-value" id="kpiTight">0<small>%</small></div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">BLOCKED</div>
+              <div class="kpi-value" id="kpiBlocked">0<small>%</small></div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">UNKNOWN</div>
+              <div class="kpi-value" id="kpiUnknown">0<small>%</small></div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="col-8 stack">
+              <div class="panel player-panel">
+                <div class="player-stage">
+                  <video id="player" controls playsinline preload="metadata"></video>
+                </div>
+              </div>
+
+              <section class="panel" aria-labelledby="stripHeading">
+                <header>
+                  <h2 id="stripHeading">Verdict over time</h2>
+                  <span class="meta">the annotated strip from the pipeline</span>
+                </header>
+                <div class="strip-block">
+                  <div class="strip" style="height:auto">
+                    <img id="timeline" alt="Verdict strip: colour-coded SAFE, TIGHT, BLOCKED and UNKNOWN across the clip" style="width:100%;display:block">
+                    <div class="playhead" id="playhead" hidden></div>
+                  </div>
+                </div>
+                <div class="legend" style="margin-top:12px">
+                  <span><i class="sw-safe"></i>SAFE</span>
+                  <span><i class="sw-tight"></i>TIGHT</span>
+                  <span><i class="sw-blocked"></i>BLOCKED</span>
+                  <span><i class="sw-unknown"></i>UNKNOWN</span>
+                </div>
+              </section>
+            </div>
+
+            <div class="col-4 stack">
+              <section class="panel" aria-labelledby="statsHeading">
+                <header><h2 id="statsHeading">Run numbers</h2></header>
+                <dl class="stats" id="stats"></dl>
+              </section>
+
+              <section class="panel" aria-labelledby="exportHeading">
+                <header><h2 id="exportHeading">Export</h2></header>
+                <div class="rows">
+                  <a class="row" id="dlEvents" href="#">
+                    <span class="name"><b>events.json</b><span class="subline">Segments, thresholds, detector</span></span>
+                    <span class="value">JSON</span>
+                  </a>
+                  <a class="row" id="dlSummary" href="#">
+                    <span class="name"><b>summary.json</b><span class="subline">Shares, timing, latency</span></span>
+                    <span class="value">JSON</span>
+                  </a>
+                  <a class="row" id="dlVideo" href="#">
+                    <span class="name"><b>annotated.mp4</b><span class="subline">The clip with the corridor burned in</span></span>
+                    <span class="value">Video</span>
+                  </a>
+                </div>
+              </section>
+
+              <section class="panel" aria-labelledby="resultNoteHeading">
+                <header><h2 id="resultNoteHeading">Reading the numbers</h2></header>
+                <p class="note" style="margin-top:0">
+                  Ranges are monocular estimates from assumed object heights and a 78&deg; field of
+                  view. A gap ratio is relative: it compares free space to the width of the vehicle
+                  beside it, not to a tape measure.
+                </p>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel error-panel" id="failed" hidden>
+          <p class="alert" id="failText" style="margin-top:0"></p>
+          <p class="note"><a href="/">Try another clip</a></p>
+        </section>
+
+        <p class="foot">
+          A verdict describes free lateral space in the ego corridor, not whether the pass is safe.
+        </p>
+      </main>
+    </div>
+  </div>
 <script>window.JOB_ID = {{ job.id | tojson }};</script>
 <script src="/static/result.js"></script>
 </body>

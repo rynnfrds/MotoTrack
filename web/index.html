@@ -3,188 +3,446 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MotoTrack - bisa nyalip?</title>
+  <title>MotoTrack - can I pass here?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-  <!-- UPLOAD VIEW -->
-  <main class="shell" id="uploadView">
-    <header class="head">
-      <div class="head-top">
-        <p class="eyebrow">MotoTrack</p>
-        <span class="badge" id="modeBadge" title="Runs directly in browser via TensorFlow.js (COCO-SSD) or connects to a MotoTrack FastAPI backend">Browser AI Ready</span>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="MotoTrack">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="27" height="27" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.18"></rect>
+          <path d="M6 21.5c5.2-1.6 10.8-1.6 16 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <path d="M10.5 21.5 12.6 9.5M17.5 21.5 15.4 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          <circle cx="14" cy="6.4" r="1.9" fill="currentColor"></circle>
+        </svg>
+        <span class="brand-name">MotoTrack</span>
+        <button type="button" class="sheet-close" id="sheetClose" aria-label="Close menu">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        </button>
       </div>
-      <h1>Bisa nyalip, atau engga?</h1>
-      <p class="lede">
-        Upload a motovlog POV clip (or try a built-in traffic simulation). Every moment gets a verdict:
-        <strong>SAFE</strong>, <strong>TIGHT</strong>, or <strong>BLOCKED</strong>,
-        based on free space in your own corridor.
-      </p>
-    </header>
+      <p class="brand-scope" id="scopeLine">Browser engine</p>
 
-    <form id="upload" class="panel" novalidate>
-      <div class="drop" id="drop">
-        <input type="file" id="file" name="file" accept="video/*" hidden>
-        <p class="drop-title">Drop a clip here, or <button type="button" class="link" id="browse">choose a file</button></p>
-        <p class="drop-meta" id="filename">no file selected</p>
+      <p class="group-label">Clips</p>
+      <nav aria-label="Screens">
+        <a class="nav-item" href="#" id="navAnalyse" aria-current="page">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h7l3 3.5-3 3.5H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path><path d="M12.5 7.2v1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          Analyse
+        </a>
+        <a class="nav-item" href="#" id="navResult" aria-disabled="true" title="Runs a clip first">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M6 6.6l3.4 2-3.4 2z" fill="currentColor"></path></svg>
+          Result
+          <span class="nav-note" id="navResultNote">none yet</span>
+        </a>
+      </nav>
+
+      <p class="group-label">Method</p>
+      <nav aria-label="Method">
+        <a class="nav-item" href="https://github.com/rynnfrds/MotoTrack/blob/main/docs/METRICS.md" target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13V6M8 13V3M13 13V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          Measured accuracy
+        </a>
+        <a class="nav-item" href="https://github.com/rynnfrds/MotoTrack/blob/main/docs/MODEL_CARD.md" target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M5.5 6h5M5.5 9h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          Model card
+        </a>
+      </nav>
+
+      <div class="bottom">
+        <p class="sidebar-note" id="engineNote">TensorFlow.js with COCO-SSD runs here, in the tab. No upload unless you name a server.</p>
       </div>
+    </aside>
 
-      <div class="row">
-        <label class="field">
-          <span>Detector</span>
-          <select id="detector" name="detector">
-            <option value="coco" selected>coco (Road-user filter)</option>
-            <option value="mixed">mixed (South Asian mixed traffic)</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Max clip length</span>
-          <select id="maxSeconds" name="maxSeconds">
-            <option value="15">15 seconds (fast)</option>
-            <option value="30" selected>30 seconds</option>
-            <option value="60">60 seconds</option>
-            <option value="90">90 seconds</option>
-          </select>
-        </label>
-        <button type="submit" class="primary" id="submit" disabled>Analyse</button>
-        <button type="button" class="ghost" id="demoBtn">Run Demo Traffic Clip (30s)</button>
-      </div>
+    <div class="canvas-wrap">
+  <header class="topbar">
+    <button type="button" class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+    </button>
+    <span class="screen-name" id="screenName">Analyse</span>
+  </header>
 
-      <details class="advanced">
-        <summary>Execution Mode &amp; Remote Backend (Optional)</summary>
-        <div class="adv-body">
-          <p class="hint">
-            By default on Vercel, MotoTrack runs <strong>100% in your browser</strong> using WebGL object detection (COCO-SSD) + the exact MotoTrack pinhole geometry, ByteTrack-style Kalman/EMA smoother, and calibrated hysteresis rules (<code>1.8 / 0.4</code>).
-            If you also run the Python FastAPI server (<code>mototrack web</code> or a tunnel), enter its URL below to use native YOLO26n weights.
-          </p>
-          <label class="field">
-            <span>FastAPI Backend URL (leave blank for In-Browser Engine)</span>
-            <input type="url" id="backendUrl" placeholder="e.g. http://127.0.0.1:8770 or https://your-api.ngrok.app">
-          </label>
+  <!-- ANALYSE VIEW -->
+  <main class="canvas" id="uploadView">
+    <div class="view-head">
+      <div class="title-row">
+        <h1>Bisa nyalip?</h1>
+        <div class="actions">
+          <span class="stamp">10 frames a second</span>
         </div>
-      </details>
-
-      <p class="hint">
-        Up to 200 MB, first 15–90 seconds are analysed at 10 fps. Long clips are truncated, not rejected.
-      </p>
-      <p class="error" id="error" role="alert" hidden></p>
-    </form>
-
-    <section class="panel status" id="status" hidden>
-      <p class="status-line"><span id="statusText">Loading AI detector...</span><span id="statusPct">0%</span></p>
-      <div class="bar"><div class="fill" id="fill"></div></div>
-      <p class="hint" id="statusHint">Detecting and tracking road users, computing corridor geometry, and rendering HUD.</p>
-      <div class="live-preview-wrap" id="livePreviewWrap" hidden>
-        <canvas id="liveCanvas"></canvas>
       </div>
-    </section>
+      <p class="sub">
+        Can I pass here, or not. Upload a POV motorcycle clip and every analysed moment is read
+        for the free lateral space in your own corridor, then marked <strong>SAFE</strong>,
+        <strong>TIGHT</strong>, <strong>BLOCKED</strong>, or <strong>UNKNOWN</strong>.
+      </p>
+    </div>
 
-    <section class="panel info-grid">
-      <div>
-        <h2>How the decision works</h2>
-        <ol class="steps-list">
-          <li><strong>Detect &amp; Track:</strong> Identifies road users (<code>person</code>, <code>bicycle</code>, <code>motorcycle</code>, <code>car</code>, <code>bus</code>, <code>truck</code>) and smooths boxes with EMA (<code>&alpha;=0.45</code>) + 0.4 s dropout coasting.</li>
-          <li><strong>Ego Corridor:</strong> Projects a relative trapezoid (bottom <code>0.30–0.70</code> width to horizon <code>y=0.45</code>) that works on both 16:9 landscape and 9:16 reels.</li>
-          <li><strong>Scale-Invariant Gap:</strong> Measures the widest free lateral gap in the nearest occupied depth band, normalised by median vehicle width at that same band.</li>
-          <li><strong>Calibrated Verdict:</strong> Fitted thresholds (<code>SAFE &ge; 1.8</code>, <code>TIGHT &ge; 0.4</code>) with center-line coverage &amp; TTC overrides, stabilised by a 2.0 s median filter and 0.5 s hysteresis.</li>
+    <div class="grid">
+      <section class="panel col-12" aria-labelledby="clipHeading">
+        <header>
+          <h2 id="clipHeading">Analyse a clip</h2>
+          <span class="meta">MP4, MOV or WebM &middot; up to 200 MB &middot; a longer clip is truncated, not rejected</span>
+        </header>
+
+        <form id="upload" novalidate class="analyse-grid">
+          <div class="well" id="drop">
+            <input type="file" id="file" name="file" accept="video/*" hidden>
+            <p class="well-line">
+              Drop a clip here, or
+              <button type="button" class="link-button" id="browse">choose a file</button>.
+            </p>
+            <p class="well-file" id="filename">No file selected</p>
+          </div>
+
+          <div class="controls">
+            <div class="field">
+              <label for="detector">Detector</label>
+              <select class="input" id="detector" name="detector">
+                <option value="coco" selected>coco &middot; road users</option>
+                <option value="mixed">mixed &middot; mixed traffic</option>
+              </select>
+              <span class="hint">coco scored better on the gold clip; mixed relabels bikes and cars as 2- and 4-wheelers.</span>
+            </div>
+            <div class="field">
+              <label for="maxSeconds">Analysed length</label>
+              <select class="input" id="maxSeconds" name="maxSeconds">
+                <option value="15">First 15 seconds</option>
+                <option value="30" selected>First 30 seconds</option>
+                <option value="60">First 60 seconds</option>
+                <option value="90">First 90 seconds</option>
+              </select>
+              <span class="hint">Each frame is decoded once, so a longer window costs time linearly.</span>
+            </div>
+            <button type="submit" class="btn primary" id="submit" disabled>Analyse clip</button>
+            <details class="method-note">
+              <summary>Run on a local FastAPI server instead</summary>
+              <div class="adv">
+                <p class="note">
+                  Blank, everything runs in this tab: WebGL detection plus the same pinhole
+                  geometry, smoother and hysteresis as the Python package.
+                </p>
+                <div class="field">
+                  <label for="backendUrl">Server address</label>
+                  <input class="input" type="url" id="backendUrl" placeholder="http://127.0.0.1:8770">
+                  <span class="hint">Leave blank to stay in the browser.</span>
+                </div>
+              </div>
+            </details>
+            <p class="alert" id="error" role="alert" hidden></p>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel col-12" id="status" hidden aria-live="polite">
+        <div class="progress-head">
+          <span class="label" id="statusText">Loading detector</span>
+          <span class="progress-pct" id="statusPct">0%</span>
+        </div>
+        <div class="track"><span id="fill"></span></div>
+        <p class="note" id="statusHint">Detecting and tracking road users, computing corridor geometry, drawing the HUD.</p>
+        <div class="live-preview" id="livePreviewWrap" hidden>
+          <canvas id="liveCanvas"></canvas>
+        </div>
+      </section>
+
+      <section class="panel col-12" aria-labelledby="verdictHeading">
+        <header>
+          <h2 id="verdictHeading">How a verdict is read</h2>
+          <span class="meta">gap ratio = free space / median vehicle width</span>
+        </header>
+        <div class="key-grid">
+          <div class="key-item">
+            <span class="key-name"><i class="key-swatch sw-safe"></i>SAFE</span>
+            <span class="key-rule">Free gap at least <code>1.8</code> vehicle-widths at the nearest occupied depth band.</span>
+          </div>
+          <div class="key-item">
+            <span class="key-name"><i class="key-swatch sw-tight"></i>TIGHT</span>
+            <span class="key-rule">A gap between <code>0.4</code> and <code>1.8</code>; committing is a squeeze.</span>
+          </div>
+          <div class="key-item">
+            <span class="key-name"><i class="key-swatch sw-blocked"></i>BLOCKED</span>
+            <span class="key-rule">Under <code>0.4</code>, or the centre line is covered, or a blocker closes inside 1.5 s.</span>
+          </div>
+          <div class="key-item">
+            <span class="key-name"><i class="key-swatch sw-unknown"></i>UNKNOWN</span>
+            <span class="key-rule">Not enough evidence: the stabiliser abstains until its 2 s window fills.</span>
+          </div>
+        </div>
+        <div class="verdict-explainer">
+          <figure class="corridor-figure">
+            <svg viewBox="0 0 320 172" role="img" aria-label="Ego corridor trapezoid with two road users beside a free gap of 1.9 vehicle widths">
+                <rect x="0" y="0" width="320" height="172" fill="var(--raised)"></rect>
+                <path d="M0 80h320" stroke="var(--control)" stroke-width="1"></path>
+                <text x="8" y="76" font-size="11" fill="var(--faint)">horizon y = 0.45</text>
+                <path d="M4 158 150 80M316 158 170 80" stroke="var(--control)" stroke-width="1" fill="none"></path>
+                <path d="M120 158v-10M129 146v-8M138 135v-7M146 125v-6M154 116v-5M161 107v-4" stroke="var(--control)" stroke-width="1.5" fill="none"></path>
+                <path d="M96 158 145.6 80 174.4 80 224 158Z" fill="rgba(29,95,191,0.10)" stroke="var(--accent)" stroke-width="1.25"></path>
+                <rect x="102" y="124" width="34" height="30" fill="none" stroke="var(--text)" stroke-width="1.25"></rect>
+                <rect x="186" y="120" width="30" height="26" fill="none" stroke="var(--text)" stroke-width="1.25"></rect>
+                <path d="M140 164h42" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"></path>
+                <text x="161" y="156" font-size="11" fill="var(--accent)" text-anchor="middle">gap 1.9</text>
+                <path d="M148 158 156 149h14l8 9Z" fill="var(--text)"></path>
+                <text x="6" y="154" font-size="11" fill="var(--faint)">ego</text>
+              </svg>
+            <figcaption>
+              The corridor's bottom edge runs 0.30 to 0.70 of the frame width and narrows to the
+              horizon at 0.45, so one trapezoid serves 16:9 landscape and 9:16 reels.
+            </figcaption>
+          </figure>
+          <div class="method-list">
+            <p><b>Nearest band wins.</b> Road users are bucketed at 3 m and 8 m from an assumed height, and only the nearest occupied band is scored.</p>
+            <p><b>Normalised, so it travels.</b> Dividing by the median vehicle width in that band makes the gap scale-invariant, which is why no camera calibration is needed.</p>
+            <p><b>Time-to-collision on top.</b> A blocker closing inside 1.5 s downgrades the verdict regardless of the static gap, and a 2.0 s median with 0.5 s hysteresis stops a one-frame glitch from flipping the label.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel col-12" aria-labelledby="methodHeading">
+        <header>
+          <h2 id="methodHeading">How the decision is reached</h2>
+          <span class="meta">same code path as the Python package</span>
+        </header>
+        <ol class="steps">
+          <li>
+            <span class="step-num">1</span>
+            <div>
+              <h3>Detect and track</h3>
+              <p>Six road-user classes, boxes smoothed with an EMA of <code>0.45</code>, coasted through 0.4 s of dropout and drawn dashed while inferred.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-num">2</span>
+            <div>
+              <h3>Project the corridor</h3>
+              <p>A trapezoid fixed in relative coordinates, so no camera calibration is required and the horizon is simply assumed at <code>0.45</code>.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-num">3</span>
+            <div>
+              <h3>Measure the gap</h3>
+              <p>The widest free lateral gap in the nearest band, divided by the median vehicle width in that band.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-num">4</span>
+            <div>
+              <h3>Decide</h3>
+              <p>Fitted thresholds with centre-line and collision overrides, then a 2 s median and 0.5 s hysteresis.</p>
+            </div>
+          </li>
         </ol>
-      </div>
-    </section>
+      </section>
 
-    <footer class="foot">
-      <p>
-        Verdicts describe free lateral space in the ego corridor, not overall traffic safety.
-        Ranges are monocular estimates from assumed object heights and a 78&deg; HFOV, not sensor readings.
-      </p>
-    </footer>
+      <section class="panel col-12" aria-labelledby="demoHeading">
+        <header>
+          <h2 id="demoHeading">No clip at hand</h2>
+          <span class="meta">30 s, recorded in the browser</span>
+        </header>
+        <div class="split-5-7">
+          <div>
+            <p class="sub">
+              The demo renders a 960 &times; 540 traffic POV and runs the real pipeline on it, so
+              the strip beside is what the analyser produces, not a mock.
+            </p>
+            <button type="button" class="btn" id="demoBtn" style="margin-top:14px">Run the demo clip</button>
+          </div>
+          <div class="strip-block">
+            <div class="strip" role="img" aria-label="Demo verdict timeline: UNKNOWN 0.4 s, SAFE 16.7 s, TIGHT 5.9 s, BLOCKED 7.0 s, SAFE 6.6 s">
+              <div class="strip-track">
+                <span class="strip-seg UNKNOWN" style="width:1.33%"></span>
+                <span class="strip-seg SAFE" style="width:33.67%"></span>
+                <span class="strip-seg TIGHT" style="width:19.67%"></span>
+                <span class="strip-seg BLOCKED" style="width:23.33%"></span>
+                <span class="strip-seg SAFE" style="width:22%"></span>
+              </div>
+            </div>
+            <div class="strip-axis"><span>0 s</span><span>30 s</span></div>
+            <div class="legend">
+              <span><i class="sw-safe"></i>SAFE 16.7 s</span>
+              <span><i class="sw-tight"></i>TIGHT 5.9 s</span>
+              <span><i class="sw-blocked"></i>BLOCKED 7.0 s</span>
+              <span><i class="sw-unknown"></i>UNKNOWN 0.4 s</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <p class="foot">
+      A verdict describes free lateral space in the ego corridor, not whether the pass is safe; it
+      is not rider assistance. Ranges come from assumed object heights and a 78&deg; horizontal field
+      of view, so treat metres as relative. Thresholds were fitted on 30 hand-labelled frames from
+      one clip, which is the honesty limit of the whole thing. Footage stays in this browser tab
+      unless you name a server.
+    </p>
   </main>
 
   <!-- RESULT VIEW -->
-  <main class="shell wide" id="resultView" hidden>
-    <header class="head">
-      <div class="head-top">
-        <p class="eyebrow"><a href="#" id="backLink">&larr; MotoTrack</a></p>
-        <span class="badge" id="resultEngineBadge">In-Browser Engine</span>
+  <main class="canvas" id="resultView" hidden>
+    <div class="view-head">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a class="parent" href="#" id="backLink">Analyse</a>
+        <span class="sep">/</span>
+        <span class="stamp" id="resultEngineBadge">In-browser engine</span>
+      </nav>
+      <div class="title-row">
+        <h1 id="resultTitle">clip.mp4</h1>
+        <div class="actions">
+          <button type="button" class="btn" id="newClipBtn">New clip</button>
+        </div>
       </div>
-      <h1 id="resultTitle">clip.mp4</h1>
-      <p class="lede" id="lede">Loading result...</p>
-    </header>
+      <p class="sub" id="lede">Loading result</p>
+    </div>
 
     <section id="done">
-      <div class="panel video-panel">
-        <div class="player-stage" id="playerStage">
-          <video id="player" controls playsinline preload="metadata"></video>
-          <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+      <div class="kpis" style="margin-bottom:12px" aria-label="Verdict share of analysed time">
+        <div class="kpi">
+          <div class="kpi-label">SAFE</div>
+          <div class="kpi-value" id="kpiSafe">0<small>%</small></div>
+          <div class="kpi-foot" id="kpiSafeFoot">0.0 s</div>
         </div>
-        <div class="player-bar">
-          <label class="toggle-label">
-            <input type="checkbox" id="toggleHud" checked>
-            <span>Show Annotated Corridor &amp; HUD Overlay</span>
-          </label>
-          <span class="hint" id="frameReadout">t=0.0s</span>
+        <div class="kpi">
+          <div class="kpi-label">TIGHT</div>
+          <div class="kpi-value" id="kpiTight">0<small>%</small></div>
+          <div class="kpi-foot" id="kpiTightFoot">0.0 s</div>
         </div>
-      </div>
-
-      <div class="panel">
-        <h2>Verdict timeline <span class="sub-hint">(click anywhere on the strip to seek)</span></h2>
-        <div class="timeline-wrap" id="timelineWrap">
-          <img id="timeline" alt="Colour-coded verdict timeline across the clip">
-          <div class="playhead" id="playhead" hidden></div>
+        <div class="kpi">
+          <div class="kpi-label">BLOCKED</div>
+          <div class="kpi-value" id="kpiBlocked">0<small>%</small></div>
+          <div class="kpi-foot" id="kpiBlockedFoot">0.0 s</div>
         </div>
-        <div class="legend">
-          <span><i class="sw safe"></i>SAFE</span>
-          <span><i class="sw tight"></i>TIGHT</span>
-          <span><i class="sw blocked"></i>BLOCKED</span>
-          <span><i class="sw unknown"></i>UNKNOWN</span>
+        <div class="kpi">
+          <div class="kpi-label">UNKNOWN</div>
+          <div class="kpi-value" id="kpiUnknown">0<small>%</small></div>
+          <div class="kpi-foot" id="kpiUnknownFoot">0.0 s</div>
         </div>
       </div>
 
-      <div class="panel">
-        <h2>Numbers</h2>
-        <dl class="stats" id="stats"></dl>
-        <p class="hint">
-          Ranges are monocular estimates from assumed object heights and a 78 degree
-          field of view. Treat them as relative, not as measurements.
-        </p>
-      </div>
+      <div class="grid">
+        <div class="col-8 stack">
+          <div class="panel player-panel">
+            <div class="player-stage" id="playerStage">
+              <video id="player" controls playsinline preload="metadata"></video>
+              <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+            </div>
+            <div class="player-bar">
+              <label class="toggle">
+                <input type="checkbox" id="toggleHud" checked>
+                <span>Corridor and HUD overlay</span>
+              </label>
+              <span class="stamp" id="frameReadout">t=0.0 s</span>
+            </div>
+          </div>
 
-      <div class="panel">
-        <h2>Verdict segments</h2>
-        <div class="table-wrap">
-          <table class="seg-table" id="segTable">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Verdict</th>
-                <th>Min Gap Ratio</th>
-                <th>Frames</th>
-                <th>Blocking IDs</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+          <section class="panel" aria-labelledby="stripHeading">
+            <header>
+              <h2 id="stripHeading">Verdict over time</h2>
+              <span class="meta">click the strip to seek</span>
+            </header>
+            <div class="strip-block">
+              <div class="strip" id="timelineWrap" role="slider" tabindex="0"
+                   aria-label="Verdict timeline" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="strip-track" id="stripTrack"></div>
+                <div class="playhead" id="playhead"></div>
+              </div>
+              <div class="strip-axis"><span id="stripStart">0 s</span><span id="stripEnd">0 s</span></div>
+            </div>
+            <div class="legend" style="margin-top:12px">
+              <span><i class="sw-safe"></i>SAFE</span>
+              <span><i class="sw-tight"></i>TIGHT</span>
+              <span><i class="sw-blocked"></i>BLOCKED</span>
+              <span><i class="sw-unknown"></i>UNKNOWN</span>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="segHeading">
+            <header>
+              <h2 id="segHeading">Verdict segments</h2>
+              <span class="meta" id="segCount">0 segments</span>
+            </header>
+            <div class="table-wrap">
+              <table class="seg-table" id="segTable">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Verdict</th>
+                    <th class="n">Min gap</th>
+                    <th class="n">Frames</th>
+                    <th>Blocking tracks</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
         </div>
-      </div>
 
-      <div class="panel">
-        <h2>Export</h2>
-        <div class="row">
-          <a class="ghost" id="dlEvents" download="events.json">events.json</a>
-          <a class="ghost" id="dlSummary" download="summary.json">summary.json</a>
-          <a class="ghost" id="dlTimeline" download="timeline.png">timeline.png</a>
-          <a class="ghost" id="dlVideo" download="annotated.webm">annotated video</a>
-          <button type="button" class="primary" id="newClipBtn">Analyse Another Clip</button>
+        <div class="col-4 stack">
+          <section class="panel" aria-labelledby="gapHeading">
+            <header>
+              <h2 id="gapHeading">Free gap ratio</h2>
+              <span class="meta">vehicle-widths</span>
+            </header>
+            <div class="chart-host" id="gapChart"></div>
+            <p class="note">
+              Above <code>1.8</code> the corridor is clear enough to commit; below <code>0.4</code> it is
+              closed. Values are capped at 4 on the axis; the tooltip reports the real figure.
+            </p>
+          </section>
+
+          <section class="panel" aria-labelledby="statsHeading">
+            <header><h2 id="statsHeading">Run numbers</h2></header>
+            <dl class="stats" id="stats"></dl>
+          </section>
+
+          <section class="panel" aria-labelledby="exportHeading">
+            <header><h2 id="exportHeading">Export</h2></header>
+            <div class="rows">
+              <a class="row" id="dlEvents" download="events.json">
+                <span class="name"><b>events.json</b><span class="subline">Segments, thresholds, detector</span></span>
+                <span class="value">JSON</span>
+              </a>
+              <a class="row" id="dlSummary" download="summary.json">
+                <span class="name"><b>summary.json</b><span class="subline">Shares, timing, latency</span></span>
+                <span class="value">JSON</span>
+              </a>
+              <a class="row" id="dlTimeline" download="timeline.png">
+                <span class="name"><b>timeline.png</b><span class="subline">The verdict strip as an image</span></span>
+                <span class="value">PNG</span>
+              </a>
+              <a class="row" id="dlVideo" download="annotated.webm">
+                <span class="name"><b>Annotated video</b><span class="subline">The clip as analysed</span></span>
+                <span class="value">Video</span>
+              </a>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="resultNoteHeading">
+            <header><h2 id="resultNoteHeading">Reading the numbers</h2></header>
+            <p class="note" style="margin-top:0">
+              Ranges are monocular estimates from assumed object heights and a 78&deg; field of
+              view. A gap ratio is a relative figure: it compares free space to the width of the
+              vehicle beside it, not to a tape measure.
+            </p>
+          </section>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- TensorFlow.js + COCO-SSD for zero-server Vercel execution -->
+  <!-- TensorFlow.js + COCO-SSD for the zero-server build -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="static/charts.js"></script>
   <script src="static/mototrack-engine.js"></script>
   <script src="static/app.js"></script>
+    </div>
+  </div>
 </body>
 </html>
-

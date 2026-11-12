@@ -10,6 +10,26 @@ const statusText = document.getElementById("statusText");
 const statusPct = document.getElementById("statusPct");
 const fill = document.getElementById("fill");
 
+const sidebar = document.getElementById("sidebar");
+const menuToggle = document.getElementById("menuToggle");
+const sheetClose = document.getElementById("sheetClose");
+
+function closeMenu() {
+  sidebar.classList.remove("open");
+  if (menuToggle) menuToggle.setAttribute("aria-expanded", "false");
+}
+if (menuToggle) {
+  menuToggle.addEventListener("click", () => {
+    sidebar.classList.add("open");
+    menuToggle.setAttribute("aria-expanded", "true");
+    if (sheetClose) sheetClose.focus();
+  });
+}
+if (sheetClose) sheetClose.addEventListener("click", closeMenu);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMenu();
+});
+
 let selected = null;
 
 function showError(message) {
@@ -85,6 +105,7 @@ form.addEventListener("submit", async (event) => {
   showError("");
   statusEl.hidden = false;
   statusText.textContent = "Uploading";
+  statusPct.textContent = "4%";
   fill.style.width = "4%";
 
   const body = new FormData();

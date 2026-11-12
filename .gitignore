@@ -42,3 +42,7 @@ data/samples/
 .DS_Store
 Thumbs.db
 .vercel
+
+# Design-tool working files (screenshots and the dealt direction sheet)
+.taste-skill/
+.archify/
