@@ -46,3 +46,7 @@ Thumbs.db
 # Design-tool working files (screenshots and the dealt direction sheet)
 .taste-skill/
 .archify/
+
+# Markdown docs stay local; only README is published
+*.md
+!README.md
